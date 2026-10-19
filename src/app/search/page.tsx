@@ -1,20 +1,20 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Search as SearchIcon, X, Music, Play, Pause } from "lucide-react";
+import { Search as SearchIcon, X, Play, Pause, Disc } from "lucide-react";
 import { Track } from "@/types/music";
 import { TrackRow } from "@/components/TrackRow";
 import { usePlayerStore } from "@/store/player-store";
 
-const GENRES = [
-  { name: "Hip-Hop", color: "from-orange-600 to-amber-700" },
-  { name: "Pop", color: "from-blue-600 to-indigo-700" },
-  { name: "Rock", color: "from-red-600 to-rose-800" },
-  { name: "R&B", color: "from-purple-600 to-fuchsia-800" },
-  { name: "Electronic", color: "from-teal-600 to-emerald-800" },
-  { name: "Lo-Fi Beats", color: "from-yellow-600 to-orange-800" },
-  { name: "Classical", color: "from-stone-600 to-slate-800" },
-  { name: "Anime / OST", color: "from-pink-600 to-rose-700" },
+const MOODS = [
+  { name: "Nocturne Ambient", sub: "Atmospheric & Calm", gradient: "from-[#14151C] to-[#1E1F2A]" },
+  { name: "Obsidian Electronic", sub: "Deep Synth & Bass", gradient: "from-[#12141C] to-[#252838]" },
+  { name: "Neoclassical & Piano", sub: "Strings & Keys", gradient: "from-[#16151B] to-[#2B2735]" },
+  { name: "Deep House & Groove", sub: "Late Night Melodic", gradient: "from-[#15171B] to-[#222731]" },
+  { name: "Lo-Fi Resonance", sub: "Tapes & Vinyl Heat", gradient: "from-[#181615] to-[#2D2824]" },
+  { name: "Cinematic Horizons", sub: "Film Scores & Epics", gradient: "from-[#12161A] to-[#202933]" },
+  { name: "Soul & Warm Jazz", sub: "Analog Brass & Rhodes", gradient: "from-[#1A1615] to-[#332A24]" },
+  { name: "Contemporary Wave", sub: "Modern Anthems", gradient: "from-[#16131C] to-[#2C2138]" },
 ];
 
 export default function SearchPage() {
@@ -53,65 +53,65 @@ export default function SearchPage() {
   const isTopPlaying = currentTrack?.id === topResult?.id && isPlaying;
 
   return (
-    <div className="flex-1 p-6 flex flex-col gap-6">
+    <div className="flex-1 p-8 flex flex-col gap-8">
       {/* Search Input Bar */}
-      <div className="relative max-w-md">
-        <SearchIcon className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-spotify-subdued" />
+      <div className="relative max-w-lg">
+        <SearchIcon className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-aether-gold" />
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="What do you want to play?"
+          placeholder="Search artist, composition, or frequency..."
           autoFocus
-          className="w-full bg-spotify-highlight text-white placeholder-spotify-subdued text-sm rounded-full pl-11 pr-10 py-3 focus:outline-none focus:ring-2 focus:ring-white transition"
+          className="w-full bg-aether-surface/80 border border-aether-border/60 text-white placeholder-aether-muted text-xs tracking-wider rounded-2xl pl-12 pr-10 py-3.5 focus:outline-none focus:border-aether-gold/80 focus:ring-1 focus:ring-aether-gold/50 transition-all shadow-inner"
         />
         {query && (
           <button
             onClick={() => setQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-spotify-subdued hover:text-white transition"
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-aether-muted hover:text-white transition"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
 
-      {/* Loading state */}
+      {/* Loading Indicator */}
       {loading && (
-        <div className="text-spotify-subdued text-sm animate-pulse">
-          Searching artists, tracks, and albums...
+        <div className="text-aether-gold text-xs font-mono tracking-widest uppercase animate-pulse">
+          Querying global frequency matrix...
         </div>
       )}
 
-      {/* Results View */}
+      {/* Search Results */}
       {!loading && results.length > 0 && (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Top Result Card */}
+            {/* Top Spotlight Result */}
             {topResult && (
               <div className="lg:col-span-1 flex flex-col gap-3">
-                <h2 className="text-xl font-bold text-white tracking-tight">
-                  Top result
-                </h2>
+                <span className="text-[10px] font-semibold text-aether-muted uppercase tracking-[0.2em]">
+                  Prime Result
+                </span>
                 <div
                   onClick={() => playTrack(topResult, results)}
-                  className="group bg-spotify-elevated hover:bg-spotify-highlight/80 p-5 rounded-lg flex flex-col justify-between cursor-pointer transition relative shadow-lg"
+                  className="group bg-aether-surface/50 hover:bg-aether-surface border border-aether-border/40 hover:border-aether-gold/30 p-6 rounded-2xl flex flex-col justify-between cursor-pointer transition relative shadow-lg"
                 >
-                  <div className="w-24 h-24 rounded overflow-hidden bg-spotify-highlight shadow-md mb-4">
+                  <div className="w-24 h-24 rounded-xl overflow-hidden bg-aether-highlight shadow-md mb-5 border border-aether-border/60">
                     <img
                       src={topResult.thumbnail}
                       alt={topResult.title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold text-white truncate">
+                    <h3 className="text-xl font-bold text-white tracking-tight truncate">
                       {topResult.title}
                     </h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs bg-black/40 text-spotify-subdued px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">
-                        Song
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[9px] font-mono text-aether-gold bg-aether-gold/10 border border-aether-gold/20 px-2 py-0.5 rounded uppercase">
+                        Master
                       </span>
-                      <span className="text-spotify-subdued text-sm truncate">
+                      <span className="text-aether-subdued text-xs truncate">
                         {topResult.artist}
                       </span>
                     </div>
@@ -126,12 +126,12 @@ export default function SearchPage() {
                         playTrack(topResult, results);
                       }
                     }}
-                    className="absolute bottom-5 right-5 w-12 h-12 rounded-full bg-spotify-green hover:bg-spotify-green-hover text-black flex items-center justify-center shadow-xl opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0"
+                    className="absolute bottom-6 right-6 w-11 h-11 rounded-full bg-gradient-to-tr from-aether-gold-muted via-aether-gold to-aether-gold-hover text-black flex items-center justify-center shadow-gold-glow opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0"
                   >
                     {isTopPlaying ? (
-                      <Pause className="w-6 h-6 fill-black" />
+                      <Pause className="w-4 h-4 fill-black text-black" />
                     ) : (
-                      <Play className="w-6 h-6 fill-black ml-0.5" />
+                      <Play className="w-4 h-4 fill-black text-black ml-0.5" />
                     )}
                   </button>
                 </div>
@@ -140,9 +140,9 @@ export default function SearchPage() {
 
             {/* Songs List */}
             <div className="lg:col-span-2 flex flex-col gap-3">
-              <h2 className="text-xl font-bold text-white tracking-tight">
-                Songs
-              </h2>
+              <span className="text-[10px] font-semibold text-aether-muted uppercase tracking-[0.2em]">
+                Compositions
+              </span>
               <div className="flex flex-col">
                 {results.slice(0, 5).map((track, idx) => (
                   <TrackRow
@@ -156,12 +156,12 @@ export default function SearchPage() {
             </div>
           </div>
 
-          {/* More Results */}
+          {/* More Tracks */}
           {results.length > 5 && (
-            <div className="flex flex-col gap-3 mt-4">
-              <h2 className="text-xl font-bold text-white tracking-tight">
-                More Results
-              </h2>
+            <div className="flex flex-col gap-3">
+              <span className="text-[10px] font-semibold text-aether-muted uppercase tracking-[0.2em]">
+                Extended Discography
+              </span>
               <div className="flex flex-col">
                 {results.slice(5).map((track, idx) => (
                   <TrackRow
@@ -177,23 +177,28 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* Empty Search: Browse Categories */}
+      {/* Mood Discovery Trays */}
       {!loading && !query && (
         <div className="flex flex-col gap-4">
-          <h2 className="text-xl font-bold text-white tracking-tight">
-            Browse all
-          </h2>
+          <div className="flex items-center gap-2 border-b border-aether-border/30 pb-3">
+            <Disc className="w-4 h-4 text-aether-gold" />
+            <h2 className="text-xs font-bold text-white tracking-wider uppercase">
+              Curated Soundscapes
+            </h2>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {GENRES.map((genre) => (
+            {MOODS.map((mood) => (
               <div
-                key={genre.name}
-                onClick={() => setQuery(genre.name)}
-                className={`h-32 p-4 rounded-lg bg-gradient-to-br ${genre.color} flex justify-between cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition shadow-md select-none overflow-hidden relative`}
+                key={mood.name}
+                onClick={() => setQuery(mood.name)}
+                className={`p-5 rounded-2xl bg-gradient-to-br ${mood.gradient} border border-aether-border/40 hover:border-aether-gold/40 flex flex-col justify-between cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all shadow-md group select-none`}
               >
-                <span className="font-bold text-lg text-white">
-                  {genre.name}
+                <span className="text-xs font-bold text-white tracking-wide group-hover:text-aether-gold transition">
+                  {mood.name}
                 </span>
-                <Music className="w-16 h-16 text-white/20 absolute -bottom-2 -right-2 rotate-12" />
+                <span className="text-[10px] text-aether-subdued font-mono mt-4">
+                  {mood.sub}
+                </span>
               </div>
             ))}
           </div>

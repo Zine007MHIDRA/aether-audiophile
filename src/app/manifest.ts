@@ -2,13 +2,13 @@ import { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Spotify - Web Player",
-    short_name: "Spotify",
-    description: "Personal zero-storage music streaming player",
+    name: "Aether — Audiophile Streaming",
+    short_name: "Aether",
+    description: "High-fidelity, zero-storage music player for discerning listeners",
     start_url: "/",
     display: "standalone",
-    background_color: "#000000",
-    theme_color: "#1db954",
+    background_color: "#060709",
+    theme_color: "#060709",
     orientation: "portrait-primary",
     icons: [
       {

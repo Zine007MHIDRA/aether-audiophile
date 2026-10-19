@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { X, Mic2 } from "lucide-react";
+import { X, Sparkles } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 
 interface ParsedLyric {
-  time: number; // in seconds
+  time: number;
   text: string;
 }
 
@@ -72,7 +72,6 @@ export function LyricsModal() {
     };
   }, [currentTrack, isLyricsOpen]);
 
-  // Auto-scroll active line into view
   useEffect(() => {
     if (activeLineRef.current) {
       activeLineRef.current.scrollIntoView({
@@ -84,7 +83,6 @@ export function LyricsModal() {
 
   if (!isLyricsOpen || !currentTrack) return null;
 
-  // Determine current active lyric line
   let activeIndex = -1;
   for (let i = 0; i < syncedLyrics.length; i++) {
     if (progress >= syncedLyrics[i].time) {
@@ -95,33 +93,33 @@ export function LyricsModal() {
   }
 
   return (
-    <div className="fixed inset-0 top-0 bottom-20 z-40 bg-gradient-to-b from-indigo-950 via-spotify-dark to-black p-8 overflow-y-auto flex flex-col items-center">
-      {/* Top Header */}
-      <div className="w-full max-w-2xl flex items-center justify-between pb-6 border-b border-white/10 sticky top-0 bg-transparent backdrop-blur-md z-10">
-        <div className="flex items-center gap-3">
-          <Mic2 className="w-6 h-6 text-spotify-green" />
+    <div className="fixed inset-0 z-50 bg-aether-black/95 backdrop-blur-3xl p-8 overflow-y-auto flex flex-col items-center select-none animate-in fade-in duration-300">
+      {/* Header */}
+      <div className="w-full max-w-3xl flex items-center justify-between pb-6 border-b border-aether-border/40 sticky top-0 bg-transparent backdrop-blur-md z-10">
+        <div className="flex items-center gap-3.5">
+          <Sparkles className="w-5 h-5 text-aether-gold" />
           <div className="flex flex-col">
-            <span className="text-white font-bold text-lg truncate">
+            <span className="text-white font-bold text-base tracking-wide truncate">
               {currentTrack.title}
             </span>
-            <span className="text-spotify-subdued text-xs">
+            <span className="text-aether-gold text-xs font-mono uppercase tracking-widest mt-0.5">
               {currentTrack.artist}
             </span>
           </div>
         </div>
         <button
           onClick={toggleLyrics}
-          className="p-2 rounded-full hover:bg-white/10 text-white transition"
+          className="p-2 rounded-full hover:bg-aether-elevated text-aether-subdued hover:text-white transition border border-aether-border/40"
         >
-          <X className="w-6 h-6" />
+          <X className="w-5 h-5" />
         </button>
       </div>
 
-      {/* Lyrics Content */}
-      <div className="w-full max-w-2xl py-12 flex flex-col gap-6 text-center select-text">
+      {/* Lyrics Scroller */}
+      <div className="w-full max-w-3xl py-20 flex flex-col gap-8 text-center select-text">
         {loading ? (
-          <div className="text-spotify-subdued text-sm animate-pulse my-12">
-            Searching for lyrics...
+          <div className="text-aether-subdued text-xs font-mono uppercase tracking-widest animate-pulse my-20">
+            Fetching acoustic telemetry & lyrics...
           </div>
         ) : syncedLyrics.length > 0 ? (
           syncedLyrics.map((line, idx) => {
@@ -130,10 +128,10 @@ export function LyricsModal() {
               <p
                 key={idx}
                 ref={isActive ? activeLineRef : null}
-                className={`transition-all duration-300 font-bold text-2xl md:text-3xl cursor-default ${
+                className={`transition-all duration-300 font-medium text-2xl md:text-4xl cursor-default tracking-tight leading-relaxed ${
                   isActive
-                    ? "text-white scale-105"
-                    : "text-white/40 hover:text-white/70"
+                    ? "text-aether-gold scale-105 font-bold drop-shadow-[0_0_20px_rgba(230,194,128,0.3)]"
+                    : "text-white/25 hover:text-white/50"
                 }`}
               >
                 {line.text}
@@ -141,12 +139,12 @@ export function LyricsModal() {
             );
           })
         ) : plainLyrics ? (
-          <div className="text-white/80 whitespace-pre-line text-lg leading-relaxed">
+          <div className="text-white/80 whitespace-pre-line text-lg leading-loose font-serif">
             {plainLyrics}
           </div>
         ) : (
-          <div className="text-spotify-subdued text-sm my-12">
-            Couldn&apos;t find lyrics for this song.
+          <div className="text-aether-subdued text-sm font-mono my-20">
+            Acoustic transcripts unavailable for this track.
           </div>
         )}
       </div>

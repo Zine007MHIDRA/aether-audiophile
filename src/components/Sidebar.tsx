@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Search, Library, Heart, Music2, Plus } from "lucide-react";
+import { Compass, Search, Bookmark, Radio, Disc3 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 
 export function Sidebar() {
@@ -11,83 +11,96 @@ export function Sidebar() {
   const likedCount = usePlayerStore((state) => state.likedTrackIds.length);
 
   return (
-    <aside className="w-64 bg-spotify-black flex flex-col gap-2 p-2 h-full select-none">
-      {/* Top Navigation */}
-      <div className="bg-spotify-dark rounded-lg p-4 flex flex-col gap-4">
-        <div className="flex items-center gap-2 px-2 text-white font-bold text-xl tracking-tight">
-          <div className="w-8 h-8 rounded-full bg-spotify-green flex items-center justify-center text-black">
-            <Music2 className="w-5 h-5 fill-current" />
+    <aside className="w-64 bg-aether-dark/95 border border-aether-border/40 rounded-2xl flex flex-col p-4 select-none justify-between shadow-2xl backdrop-blur-xl">
+      <div className="flex flex-col gap-6">
+        {/* Brand Header */}
+        <div className="flex items-center gap-3.5 px-2 pt-2">
+          <div className="w-10 h-10 rounded-xl overflow-hidden shadow-gold-glow border border-aether-gold/30 bg-aether-elevated shrink-0">
+            <img
+              src="/branding/aether-logo.jpg"
+              alt="Aether"
+              className="w-full h-full object-cover"
+            />
           </div>
-          <span>Spotify <span className="text-xs text-spotify-green uppercase tracking-widest font-normal">Self</span></span>
+          <div className="flex flex-col">
+            <span className="text-white font-extrabold text-base tracking-[0.25em] uppercase">
+              Aether
+            </span>
+            <span className="text-[10px] text-aether-gold font-mono tracking-widest uppercase">
+              Hi-Fi Studio
+            </span>
+          </div>
         </div>
 
-        <nav className="flex flex-col gap-1 mt-2">
+        {/* Primary Navigation */}
+        <nav className="flex flex-col gap-1.5 pt-2">
+          <span className="text-[10px] font-semibold text-aether-muted uppercase tracking-[0.2em] px-3 mb-1">
+            Menu
+          </span>
           <Link
             href="/"
-            className={`flex items-center gap-4 px-3 py-2 rounded-md font-medium text-sm transition-colors ${
+            className={`flex items-center gap-3.5 px-3 py-2.5 rounded-xl font-medium text-xs tracking-wider transition-all duration-200 ${
               pathname === "/"
-                ? "text-white bg-spotify-highlight"
-                : "text-spotify-subdued hover:text-white"
+                ? "text-aether-gold bg-aether-gold-glow border border-aether-gold/20 shadow-sm"
+                : "text-aether-subdued hover:text-white hover:bg-aether-elevated/60"
             }`}
           >
-            <Home className="w-6 h-6" />
-            <span>Home</span>
+            <Compass className="w-4 h-4" />
+            <span>Discover</span>
           </Link>
           <Link
             href="/search"
-            className={`flex items-center gap-4 px-3 py-2 rounded-md font-medium text-sm transition-colors ${
+            className={`flex items-center gap-3.5 px-3 py-2.5 rounded-xl font-medium text-xs tracking-wider transition-all duration-200 ${
               pathname === "/search"
-                ? "text-white bg-spotify-highlight"
-                : "text-spotify-subdued hover:text-white"
+                ? "text-aether-gold bg-aether-gold-glow border border-aether-gold/20 shadow-sm"
+                : "text-aether-subdued hover:text-white hover:bg-aether-elevated/60"
             }`}
           >
-            <Search className="w-6 h-6" />
+            <Search className="w-4 h-4" />
             <span>Search</span>
           </Link>
         </nav>
-      </div>
 
-      {/* Library Section */}
-      <div className="bg-spotify-dark rounded-lg flex-1 p-4 flex flex-col gap-3 overflow-hidden">
-        <div className="flex items-center justify-between px-2 text-spotify-subdued hover:text-white cursor-pointer transition">
-          <div className="flex items-center gap-3">
-            <Library className="w-6 h-6" />
-            <span className="font-semibold text-sm">Your Library</span>
-          </div>
-          <button className="p-1 hover:bg-spotify-highlight rounded-full transition" title="Create Playlist">
-            <Plus className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Liked Songs Entry */}
-        <div className="flex-1 overflow-y-auto mt-2 flex flex-col gap-2">
+        {/* Collection Section */}
+        <div className="flex flex-col gap-1.5 pt-2">
+          <span className="text-[10px] font-semibold text-aether-muted uppercase tracking-[0.2em] px-3 mb-1">
+            Library
+          </span>
           <Link
             href="/collection/tracks"
-            className={`flex items-center gap-3 p-2 rounded-md hover:bg-spotify-highlight/50 transition cursor-pointer ${
-              pathname === "/collection/tracks" ? "bg-spotify-highlight" : ""
+            className={`flex items-center justify-between px-3 py-2.5 rounded-xl font-medium text-xs tracking-wider transition-all duration-200 ${
+              pathname === "/collection/tracks"
+                ? "text-aether-gold bg-aether-gold-glow border border-aether-gold/20 shadow-sm"
+                : "text-aether-subdued hover:text-white hover:bg-aether-elevated/60"
             }`}
           >
-            <div className="w-12 h-12 rounded bg-gradient-to-br from-indigo-700 to-purple-400 flex items-center justify-center text-white shrink-0 shadow-lg">
-              <Heart className="w-6 h-6 fill-white" />
+            <div className="flex items-center gap-3.5">
+              <Bookmark className="w-4 h-4" />
+              <span>Vault</span>
             </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-white text-sm font-medium truncate">Liked Songs</span>
-              <span className="text-spotify-subdued text-xs">
-                {likedCount} {likedCount === 1 ? "song" : "songs"}
+            {likedCount > 0 && (
+              <span className="text-[10px] font-mono bg-aether-elevated px-2 py-0.5 rounded-full border border-aether-border/60 text-aether-gold">
+                {likedCount}
               </span>
-            </div>
+            )}
           </Link>
-
-          {/* Quick links / playlists */}
-          <div className="mt-4 border-t border-spotify-highlight pt-3 flex flex-col gap-2">
-            <span className="text-xs font-semibold text-spotify-subdued uppercase tracking-wider px-2">
-              Streaming Engine
-            </span>
-            <div className="px-2 text-xs text-spotify-subdued/80 leading-relaxed">
-              Zero storage used. Audio streamed directly on demand.
-            </div>
-          </div>
         </div>
+      </div>
+
+      {/* Audio Engine Specs Card */}
+      <div className="p-3.5 rounded-xl bg-aether-surface/60 border border-aether-border/50 flex flex-col gap-2">
+        <div className="flex items-center justify-between text-[11px]">
+          <div className="flex items-center gap-2 text-aether-text">
+            <Radio className="w-3.5 h-3.5 text-aether-gold animate-pulse" />
+            <span className="font-semibold tracking-wide">Audio Engine</span>
+          </div>
+          <span className="text-[9px] font-mono text-aether-gold bg-aether-gold/10 px-1.5 py-0.5 rounded border border-aether-gold/20">
+            24-BIT
+          </span>
+        </div>
+        <p className="text-[10px] text-aether-subdued leading-relaxed">
+          Zero-storage on-demand proxy with lossless byte-range seeking.
+        </p>
       </div>
     </aside>
   );

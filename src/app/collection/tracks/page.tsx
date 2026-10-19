@@ -1,44 +1,35 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import Link from "next/link";
-import { Heart, Play, Clock } from "lucide-react";
+import { Bookmark, Sparkles, Clock, Compass } from "lucide-react";
 import { Track } from "@/types/music";
 import { TrackRow } from "@/components/TrackRow";
 import { usePlayerStore } from "@/store/player-store";
 
-export default function LikedSongsPage() {
-  const { likedTrackIds, playTrack } = usePlayerStore();
-  const [likedTracks, setLikedTracks] = useState<Track[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  // When likedTrackIds changes, if we have stored tracks or we can resolve them
-  // For demo/cache, we can store track metadata in player store or fetch
-  useEffect(() => {
-    // In a full DB setup, this fetches from the user DB
-    // Here we can fetch the tracks or read from session cache
-  }, [likedTrackIds]);
+export default function VaultPage() {
+  const { likedTrackIds } = usePlayerStore();
 
   return (
     <div className="flex-1 flex flex-col">
       {/* Header Banner */}
-      <div className="bg-gradient-to-b from-indigo-900 to-spotify-dark p-8 flex items-end gap-6 shadow-lg">
-        <div className="w-48 h-48 rounded bg-gradient-to-br from-indigo-600 to-purple-400 flex items-center justify-center text-white shadow-2xl shrink-0">
-          <Heart className="w-20 h-20 fill-white" />
+      <div className="bg-gradient-to-b from-aether-surface via-aether-elevated to-aether-dark p-8 md:p-12 flex items-end gap-6 border-b border-aether-border/30">
+        <div className="w-36 h-36 md:w-44 md:h-44 rounded-2xl bg-gradient-to-br from-aether-surface via-aether-elevated to-aether-highlight border border-aether-gold/40 flex items-center justify-center text-aether-gold shadow-gold-glow shrink-0">
+          <Bookmark className="w-16 h-16 fill-aether-gold/20 text-aether-gold" />
         </div>
         <div className="flex flex-col gap-2">
-          <span className="text-xs uppercase tracking-wider font-bold text-white/80">
-            Playlist
-          </span>
-          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight">
-            Liked Songs
+          <div className="flex items-center gap-2 text-aether-gold text-[10px] font-mono tracking-widest uppercase">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Personal Collection</span>
+          </div>
+          <h1 className="text-3xl md:text-5xl font-black text-white tracking-tight">
+            The Vault
           </h1>
-          <div className="flex items-center gap-2 text-sm text-white/80 mt-2">
-            <span className="font-semibold text-white">Your Library</span>
+          <div className="flex items-center gap-2 text-xs text-aether-subdued mt-1 font-mono">
+            <span>Saved Acoustics</span>
             <span>•</span>
-            <span>
-              {likedTrackIds.length}{" "}
-              {likedTrackIds.length === 1 ? "song" : "songs"}
+            <span className="text-aether-gold">
+              {likedTrackIds.length} {likedTrackIds.length === 1 ? "Track" : "Tracks"}
             </span>
           </div>
         </div>
@@ -47,35 +38,36 @@ export default function LikedSongsPage() {
       {/* Main Content */}
       <div className="p-8 flex-1 flex flex-col gap-6">
         {likedTrackIds.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-            <Heart className="w-16 h-16 text-spotify-subdued stroke-[1.5]" />
-            <h2 className="text-2xl font-bold text-white">
-              Songs you like will appear here
+          <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+            <Bookmark className="w-12 h-12 text-aether-muted stroke-[1.5]" />
+            <h2 className="text-xl font-bold text-white tracking-tight">
+              Your Vault is Empty
             </h2>
-            <p className="text-spotify-subdued text-sm max-w-sm">
-              Save songs by clicking the heart icon on any track in Search or Home.
+            <p className="text-aether-subdued text-xs max-w-sm leading-relaxed">
+              Bookmark tracks to preserve them in your private high-fidelity sanctuary.
             </p>
             <Link
               href="/search"
-              className="bg-white text-black font-bold px-6 py-3 rounded-full hover:scale-105 active:scale-95 transition mt-2"
+              className="flex items-center gap-2 bg-gradient-to-r from-aether-gold-hover via-aether-gold to-aether-gold-muted text-black font-bold text-xs uppercase tracking-widest px-6 py-3 rounded-full hover:scale-105 active:scale-95 transition-all shadow-gold-glow mt-3"
             >
-              Find songs to add
+              <Compass className="w-4 h-4" />
+              <span>Explore Catalog</span>
             </Link>
           </div>
         ) : (
           <div className="flex flex-col">
-            <div className="border-b border-white/10 pb-2 px-2 flex items-center justify-between text-xs text-spotify-subdued uppercase tracking-wider">
+            <div className="border-b border-aether-border/30 pb-2 px-3 flex items-center justify-between text-[10px] font-mono text-aether-muted uppercase tracking-widest">
               <div className="flex items-center gap-4">
-                <span className="w-6 text-center">#</span>
-                <span>Title</span>
+                <span className="w-5 text-center">#</span>
+                <span>Composition</span>
               </div>
               <div className="flex items-center gap-6">
-                <Clock className="w-4 h-4" />
+                <Clock className="w-3.5 h-3.5" />
               </div>
             </div>
 
-            <div className="text-spotify-subdued text-sm py-6 text-center">
-              You have {likedTrackIds.length} saved songs in your personal collection.
+            <div className="text-aether-subdued text-xs py-8 text-center font-mono">
+              {likedTrackIds.length} compositions cataloged in memory.
             </div>
           </div>
         )}

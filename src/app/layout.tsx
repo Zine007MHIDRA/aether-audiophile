@@ -5,13 +5,13 @@ import { PlayerBar } from "@/components/PlayerBar";
 import { LyricsModal } from "@/components/LyricsModal";
 
 export const metadata: Metadata = {
-  title: "Spotify - Web Player",
-  description: "Personal zero-storage music streaming player",
-  applicationName: "Spotify",
+  title: "Aether — Audiophile Music",
+  description: "Minimalist, zero-storage high-fidelity music player",
+  applicationName: "Aether",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Spotify",
+    title: "Aether",
   },
   icons: {
     icon: "/icon.svg",
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1db954",
+  themeColor: "#060709",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -34,19 +34,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="h-screen w-screen flex flex-col bg-black text-white overflow-hidden">
-        {/* Main Application Area (Sidebar + Content) */}
-        <div className="flex-1 flex overflow-hidden p-2 gap-2">
+      <body className="h-screen w-screen flex flex-col bg-aether-black text-aether-text overflow-hidden antialiased">
+        {/* Main Application Area (Sidebar + Canvas) */}
+        <div className="flex-1 flex overflow-hidden p-3 gap-3">
           <Sidebar />
-          <main className="flex-1 bg-spotify-dark rounded-lg overflow-y-auto relative flex flex-col">
+          <main className="flex-1 bg-gradient-to-b from-aether-dark via-aether-black to-black rounded-2xl border border-aether-border/40 overflow-y-auto relative flex flex-col shadow-2xl">
             {children}
+            {/* Bottom spacer so floating island player doesn't occlude bottom content */}
+            <div className="h-28 shrink-0" />
           </main>
         </div>
 
-        {/* Persistent Bottom Audio Player */}
+        {/* Floating Dynamic Island Luxury Player Bar */}
         <PlayerBar />
 
-        {/* Synced Lyrics Fullscreen Overlay */}
+        {/* Fullscreen Synced Lyrics */}
         <LyricsModal />
       </body>
     </html>

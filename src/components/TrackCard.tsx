@@ -27,41 +27,41 @@ export function TrackCard({ track, tracksContext }: TrackCardProps) {
   return (
     <div
       onClick={handlePlayClick}
-      className="group bg-spotify-elevated hover:bg-spotify-highlight/80 transition-all duration-300 p-4 rounded-lg flex flex-col gap-3 cursor-pointer relative shadow-md hover:shadow-xl"
+      className="group bg-aether-elevated/40 hover:bg-aether-elevated border border-aether-border/30 hover:border-aether-gold/40 transition-all duration-300 p-3.5 rounded-2xl flex flex-col gap-3 cursor-pointer relative shadow-sm hover:shadow-gold-glow"
     >
-      <div className="relative aspect-square w-full rounded-md overflow-hidden bg-spotify-highlight shadow-lg">
+      <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-aether-highlight shadow-md">
         <img
           src={track.thumbnail}
           alt={track.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
         />
 
-        {/* Hover / Playing green play button */}
+        {/* Minimalist Champagne Gold Play Button */}
         <button
           onClick={handlePlayClick}
-          className={`absolute bottom-2 right-2 w-11 h-11 rounded-full bg-spotify-green hover:bg-spotify-green-hover text-black flex items-center justify-center shadow-xl transition-all duration-300 ${
+          className={`absolute bottom-2.5 right-2.5 w-10 h-10 rounded-full bg-gradient-to-tr from-aether-gold-muted via-aether-gold to-aether-gold-hover text-black flex items-center justify-center shadow-lg transition-all duration-300 ${
             isCurrent
               ? "opacity-100 translate-y-0"
               : "opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0"
           }`}
         >
           {isCurrent && isPlaying ? (
-            <Pause className="w-5 h-5 fill-black" />
+            <Pause className="w-4 h-4 fill-black" />
           ) : (
-            <Play className="w-5 h-5 fill-black ml-0.5" />
+            <Play className="w-4 h-4 fill-black ml-0.5" />
           )}
         </button>
       </div>
 
-      <div className="flex flex-col min-w-0">
+      <div className="flex flex-col min-w-0 px-0.5">
         <span
-          className={`font-semibold text-sm truncate ${
-            isCurrent ? "text-spotify-green" : "text-white"
+          className={`font-semibold text-xs tracking-wide truncate ${
+            isCurrent ? "text-aether-gold font-bold" : "text-white"
           }`}
         >
           {track.title}
         </span>
-        <span className="text-spotify-subdued text-xs truncate mt-0.5">
+        <span className="text-aether-subdued text-[11px] truncate mt-1">
           {track.artist}
         </span>
       </div>

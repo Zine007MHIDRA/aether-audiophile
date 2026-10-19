@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Play, Pause, Heart } from "lucide-react";
+import { Play, Pause, Bookmark } from "lucide-react";
 import { Track } from "@/types/music";
 import { usePlayerStore } from "@/store/player-store";
 
@@ -35,30 +35,30 @@ export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
   return (
     <div
       onClick={handleRowClick}
-      className={`group flex items-center justify-between p-2 rounded-md hover:bg-white/10 transition cursor-pointer select-none text-sm ${
-        isCurrent ? "bg-white/5" : ""
+      className={`group flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-aether-elevated/70 border border-transparent hover:border-aether-border/50 transition cursor-pointer select-none text-xs ${
+        isCurrent ? "bg-aether-gold-glow/50 border-aether-gold/20" : ""
       }`}
     >
-      {/* Left: Index / Play Button & Title */}
-      <div className="flex items-center gap-4 flex-1 min-w-0 pr-4">
-        {/* Number or Play icon */}
-        <div className="w-6 text-center text-spotify-subdued text-xs shrink-0 flex items-center justify-center">
+      {/* Left: Index / Play Icon & Track Details */}
+      <div className="flex items-center gap-3.5 flex-1 min-w-0 pr-4">
+        {/* Index or Live Equalizer */}
+        <div className="w-5 text-center text-aether-muted text-[11px] font-mono shrink-0 flex items-center justify-center">
           {isCurrent && isPlaying ? (
             <div className="flex items-end gap-0.5 h-3">
-              <span className="w-1 bg-spotify-green animate-pulse h-full" />
-              <span className="w-1 bg-spotify-green animate-pulse h-2" />
-              <span className="w-1 bg-spotify-green animate-pulse h-3.5" />
+              <span className="w-0.5 bg-aether-gold animate-pulse h-full" />
+              <span className="w-0.5 bg-aether-gold animate-pulse h-2" />
+              <span className="w-0.5 bg-aether-gold animate-pulse h-3.5" />
             </div>
           ) : (
             <>
               <span className="group-hover:hidden">{index + 1}</span>
-              <Play className="w-4 h-4 fill-white text-white hidden group-hover:block" />
+              <Play className="w-3.5 h-3.5 fill-aether-gold text-aether-gold hidden group-hover:block" />
             </>
           )}
         </div>
 
-        {/* Thumbnail */}
-        <div className="w-10 h-10 rounded overflow-hidden bg-spotify-highlight shrink-0 shadow">
+        {/* Artwork Thumbnail */}
+        <div className="w-10 h-10 rounded-lg overflow-hidden bg-aether-highlight shrink-0 shadow border border-aether-border/40">
           <img
             src={track.thumbnail}
             alt={track.title}
@@ -66,44 +66,42 @@ export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
           />
         </div>
 
-        {/* Info */}
+        {/* Title & Artist */}
         <div className="flex flex-col min-w-0">
           <span
-            className={`font-medium truncate ${
-              isCurrent ? "text-spotify-green" : "text-white"
+            className={`font-medium tracking-wide truncate ${
+              isCurrent ? "text-aether-gold font-semibold" : "text-white"
             }`}
           >
             {track.title}
           </span>
-          <span className="text-spotify-subdued text-xs truncate group-hover:text-white transition">
+          <span className="text-aether-subdued text-[11px] truncate group-hover:text-aether-text transition mt-0.5">
             {track.artist}
           </span>
         </div>
       </div>
 
-      {/* Center: Album (hidden on small screens) */}
-      <div className="hidden md:block w-1/4 truncate text-spotify-subdued text-xs pr-4">
+      {/* Center: Album */}
+      <div className="hidden md:block w-1/4 truncate text-aether-muted text-[11px] pr-4">
         {track.album || "Single"}
       </div>
 
-      {/* Right: Like button & Duration */}
-      <div className="flex items-center gap-4 shrink-0 text-spotify-subdued text-xs tabular-nums">
+      {/* Right: Save to Vault & Duration */}
+      <div className="flex items-center gap-3.5 shrink-0 text-aether-subdued text-[11px] font-mono tabular-nums">
         <button
           onClick={(e) => {
             e.stopPropagation();
             toggleLike(track.id);
           }}
-          className={`p-1 transition ${
+          className={`p-1 rounded transition ${
             isLiked
-              ? "text-spotify-green fill-spotify-green"
+              ? "text-aether-gold opacity-100"
               : "opacity-0 group-hover:opacity-100 hover:text-white"
           }`}
-          title={isLiked ? "Unlike" : "Like"}
+          title={isLiked ? "Saved in Vault" : "Save to Vault"}
         >
-          <Heart
-            className={`w-4 h-4 ${
-              isLiked ? "fill-spotify-green text-spotify-green" : ""
-            }`}
+          <Bookmark
+            className={`w-3.5 h-3.5 ${isLiked ? "fill-aether-gold" : ""}`}
           />
         </button>
         <span className="w-10 text-right">{track.durationFormatted}</span>
