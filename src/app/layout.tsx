@@ -4,10 +4,12 @@ import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
 import { PlayerBar } from "@/components/PlayerBar";
 import { LyricsModal } from "@/components/LyricsModal";
+import { AuthModal } from "@/components/AuthModal";
+import { CreatePlaylistModal } from "@/components/CreatePlaylistModal";
 
 export const metadata: Metadata = {
   title: "Aether — Audiophile Music",
-  description: "Minimalist, zero-storage high-fidelity music player",
+  description: "Minimalist, zero-storage high-fidelity music player with cloud sync",
   applicationName: "Aether",
   appleWebApp: {
     capable: true,
@@ -52,8 +54,10 @@ export default function RootLayout({
         {/* Floating Dynamic Island Luxury Player Bar */}
         <PlayerBar />
 
-        {/* Fullscreen Synced Lyrics */}
+        {/* Modals & Overlays */}
         <LyricsModal />
+        <AuthModal />
+        <CreatePlaylistModal />
       </body>
     </html>
   );

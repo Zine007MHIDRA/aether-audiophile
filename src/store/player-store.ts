@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { Track } from "@/types/music";
+import { usePlaylistStore } from "./playlist-store";
 
 interface PlayerState {
   currentTrack: Track | null;
@@ -143,19 +144,25 @@ export const usePlayerStore = create<PlayerState>()(
 
       toggleShuffle: () => set((state) => ({ isShuffle: !state.isShuffle })),
 
-      toggleLike: (track) =>
+      toggleLike: (track) => {
+        const isCurrentlyLiked = get().likedTrackIds.includes(track.id);
+        const willBeLiked = !isCurrentlyLiked;
+
         set((state) => {
-          const isLiked = state.likedTrackIds.includes(track.id);
-          const likedTracks = isLiked
-            ? state.likedTracks.filter((t) => t.id !== track.id)
-            : [track, ...state.likedTracks];
+          const likedTracks = willBeLiked
+            ? [track, ...state.likedTracks.filter((t) => t.id !== track.id)]
+            : state.likedTracks.filter((t) => t.id !== track.id);
           const likedTrackIds = likedTracks.map((t) => t.id);
 
           return {
             likedTracks,
             likedTrackIds,
           };
-        }),
+        });
+
+        // Persist to Supabase if logged in
+        usePlaylistStore.getState().persistVaultTrack(track, willBeLiked);
+      },
 
       toggleLyrics: () => set((state) => ({ isLyricsOpen: !state.isLyricsOpen })),
 
