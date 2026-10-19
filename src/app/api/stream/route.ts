@@ -1,7 +1,66 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getInnertube } from "@/lib/youtube";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 export const dynamic = "force-dynamic";
+
+// In-memory cache for resolved stream URLs (valid for 3 hours)
+const urlCache = new Map<string, { url: string; expires: number }>();
+
+async function resolveAudioUrl(id: string): Promise<string> {
+  const cached = urlCache.get(id);
+  if (cached && Date.now() < cached.expires) {
+    return cached.url;
+  }
+
+  // 1. Primary: yt-dlp (fast, reliable, extracts direct Opus/WebM audio stream)
+  try {
+    const { stdout } = await execFileAsync("yt-dlp", [
+      "-g",
+      "-f",
+      "bestaudio",
+      `https://www.youtube.com/watch?v=${id}`,
+    ]);
+    const directUrl = stdout.trim().split("\n")[0];
+    if (directUrl && directUrl.startsWith("http")) {
+      urlCache.set(id, { url: directUrl, expires: Date.now() + 3 * 3600 * 1000 });
+      return directUrl;
+    }
+  } catch (err) {
+    console.warn("yt-dlp resolution failed, attempting fallback:", err);
+  }
+
+  // 2. Fallback: Public Invidious API
+  const invidiousInstances = [
+    "https://inv.nadeko.net",
+    "https://invidious.nerdvpn.de",
+    "https://invidious.jing.rocks",
+  ];
+
+  for (const instance of invidiousInstances) {
+    try {
+      const res = await fetch(`${instance}/api/v1/videos/${id}`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const formats = data.adaptiveFormats || data.formatStreams || [];
+        const audio = formats.find(
+          (f: any) => f.type?.includes("audio") || f.itag === "251" || f.itag === "140"
+        );
+        if (audio?.url) {
+          urlCache.set(id, { url: audio.url, expires: Date.now() + 2 * 3600 * 1000 });
+          return audio.url;
+        }
+      }
+    } catch {}
+  }
+
+  throw new Error("Unable to resolve audio stream for track: " + id);
+}
 
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
@@ -10,44 +69,34 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const yt = await getInnertube();
-
-    // Check if client requested a byte range
+    const directUrl = await resolveAudioUrl(id);
     const rangeHeader = req.headers.get("range");
-    let range: { start: number; end: number } | undefined;
 
-    if (rangeHeader) {
-      const parts = rangeHeader.replace(/bytes=/, "").split("-");
-      const start = parts[0] ? parseInt(parts[0], 10) : 0;
-      const end = parts[1] ? parseInt(parts[1], 10) : undefined;
-      if (typeof start === "number" && typeof end === "number") {
-        range = { start, end };
-      }
-    }
-
-    // Download audio stream using Innertube
-    const stream = await yt.download(id, {
-      type: "audio",
-      quality: "best",
-      ...(range ? { range } : {}),
+    // Forward range request to Google CDN
+    const upstreamRes = await fetch(directUrl, {
+      headers: rangeHeader ? { Range: rangeHeader } : {},
     });
 
     const headers = new Headers();
-    headers.set("Content-Type", "audio/webm; codecs=opus");
+    const contentType = upstreamRes.headers.get("content-type") || "audio/webm";
+    const contentLength = upstreamRes.headers.get("content-length");
+    const contentRange = upstreamRes.headers.get("content-range");
+
+    headers.set("Content-Type", contentType);
     headers.set("Accept-Ranges", "bytes");
-    headers.set("Cache-Control", "public, max-age=3600");
+    headers.set("Cache-Control", "public, max-age=14400");
 
-    // If a range was requested, reply with 206 Partial Content
-    const status = rangeHeader ? 206 : 200;
+    if (contentLength) headers.set("Content-Length", contentLength);
+    if (contentRange) headers.set("Content-Range", contentRange);
 
-    return new Response(stream as any, {
-      status,
+    return new Response(upstreamRes.body, {
+      status: upstreamRes.status,
       headers,
     });
   } catch (error: any) {
-    console.error("Stream API error:", error);
+    console.error("Stream route error:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to resolve stream" },
+      { error: error?.message || "Streaming failed" },
       { status: 500 }
     );
   }
