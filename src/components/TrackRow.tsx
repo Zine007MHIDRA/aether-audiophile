@@ -91,7 +91,7 @@ export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            toggleLike(track.id);
+            toggleLike(track);
           }}
           className={`p-1 rounded transition ${
             isLiked

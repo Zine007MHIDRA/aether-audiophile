@@ -13,6 +13,7 @@ interface PlayerState {
   duration: number;
   repeatMode: "off" | "all" | "one";
   isShuffle: boolean;
+  likedTracks: Track[];
   likedTrackIds: string[];
   isLyricsOpen: boolean;
 
@@ -28,7 +29,7 @@ interface PlayerState {
   toggleMute: () => void;
   toggleRepeat: () => void;
   toggleShuffle: () => void;
-  toggleLike: (trackId: string) => void;
+  toggleLike: (track: Track) => void;
   toggleLyrics: () => void;
   addToQueue: (track: Track) => void;
 }
@@ -46,14 +47,15 @@ export const usePlayerStore = create<PlayerState>()(
       duration: 0,
       repeatMode: "off",
       isShuffle: false,
+      likedTracks: [],
       likedTrackIds: [],
       isLyricsOpen: false,
 
       playTrack: (track, newQueue) => {
-        const queue = newQueue || get().queue;
+        let queue = newQueue ? [...newQueue] : [...get().queue];
         let index = queue.findIndex((t) => t.id === track.id);
         if (index === -1) {
-          queue.push(track);
+          queue = [...queue, track];
           index = queue.length - 1;
         }
 
@@ -105,7 +107,6 @@ export const usePlayerStore = create<PlayerState>()(
 
       prevTrack: () => {
         const { queue, queueIndex, progress } = get();
-        // If track has been playing for more than 3 seconds, restart it
         if (progress > 3) {
           set({ progress: 0 });
           return;
@@ -142,13 +143,17 @@ export const usePlayerStore = create<PlayerState>()(
 
       toggleShuffle: () => set((state) => ({ isShuffle: !state.isShuffle })),
 
-      toggleLike: (trackId) =>
+      toggleLike: (track) =>
         set((state) => {
-          const isLiked = state.likedTrackIds.includes(trackId);
+          const isLiked = state.likedTrackIds.includes(track.id);
+          const likedTracks = isLiked
+            ? state.likedTracks.filter((t) => t.id !== track.id)
+            : [track, ...state.likedTracks];
+          const likedTrackIds = likedTracks.map((t) => t.id);
+
           return {
-            likedTrackIds: isLiked
-              ? state.likedTrackIds.filter((id) => id !== trackId)
-              : [...state.likedTrackIds, trackId],
+            likedTracks,
+            likedTrackIds,
           };
         }),
 
@@ -160,9 +165,10 @@ export const usePlayerStore = create<PlayerState>()(
         })),
     }),
     {
-      name: "spotify-player-storage",
+      name: "aether-player-storage",
       partialize: (state) => ({
         volume: state.volume,
+        likedTracks: state.likedTracks,
         likedTrackIds: state.likedTrackIds,
         repeatMode: state.repeatMode,
         isShuffle: state.isShuffle,

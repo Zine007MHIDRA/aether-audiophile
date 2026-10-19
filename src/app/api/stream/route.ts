@@ -23,8 +23,14 @@ async function resolveAudioUrl(id: string): Promise<string> {
       "bestaudio",
       `https://www.youtube.com/watch?v=${id}`,
     ]);
-    const directUrl = stdout.trim().split("\n")[0];
-    if (directUrl && directUrl.startsWith("http")) {
+
+    // Safely extract the line starting with http (ignoring warning outputs)
+    const directUrl = stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.startsWith("http"));
+
+    if (directUrl) {
       urlCache.set(id, { url: directUrl, expires: Date.now() + 3 * 3600 * 1000 });
       return directUrl;
     }

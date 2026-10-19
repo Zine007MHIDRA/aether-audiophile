@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
+import { MobileNav } from "@/components/MobileNav";
 import { PlayerBar } from "@/components/PlayerBar";
 import { LyricsModal } from "@/components/LyricsModal";
 
@@ -35,12 +36,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="h-screen w-screen flex flex-col bg-aether-black text-aether-text overflow-hidden antialiased">
+        {/* Mobile Navigation Header (< md) */}
+        <MobileNav />
+
         {/* Main Application Area (Sidebar + Canvas) */}
-        <div className="flex-1 flex overflow-hidden p-3 gap-3">
+        <div className="flex-1 flex overflow-hidden p-2 md:p-3 gap-3">
           <Sidebar />
-          <main className="flex-1 bg-gradient-to-b from-aether-dark via-aether-black to-black rounded-2xl border border-aether-border/40 overflow-y-auto relative flex flex-col shadow-2xl">
+          <main className="flex-1 bg-gradient-to-b from-aether-dark via-aether-black to-black rounded-xl md:rounded-2xl border border-aether-border/40 overflow-y-auto relative flex flex-col shadow-2xl">
             {children}
-            {/* Bottom spacer so floating island player doesn't occlude bottom content */}
+            {/* Bottom spacer for floating dynamic island */}
             <div className="h-28 shrink-0" />
           </main>
         </div>

@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, Search, Bookmark, Radio, Disc3 } from "lucide-react";
+import { Compass, Search, Bookmark, Radio } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 
 export function Sidebar() {
@@ -11,7 +11,7 @@ export function Sidebar() {
   const likedCount = usePlayerStore((state) => state.likedTrackIds.length);
 
   return (
-    <aside className="w-64 bg-aether-dark/95 border border-aether-border/40 rounded-2xl flex flex-col p-4 select-none justify-between shadow-2xl backdrop-blur-xl">
+    <aside className="hidden md:flex w-64 bg-aether-dark/95 border border-aether-border/40 rounded-2xl flex-col p-4 select-none justify-between shadow-2xl backdrop-blur-xl shrink-0">
       <div className="flex flex-col gap-6">
         {/* Brand Header */}
         <div className="flex items-center gap-3.5 px-2 pt-2">
