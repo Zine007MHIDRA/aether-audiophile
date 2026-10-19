@@ -1,0 +1,22 @@
+# Environment variables and secrets (NEVER commit these!)
+.env
+.env*.local
+.env.local
+
+# Audio files (do not commit audio gigabytes to git)
+/music/*
+!/music/README.md
+
+# Dependencies & Build artifacts
+/node_modules
+/.pnp
+.pnp.js
+/.next/
+/out/
+/build
+dist
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
