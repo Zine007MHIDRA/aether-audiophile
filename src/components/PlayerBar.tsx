@@ -15,6 +15,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
+import type { YTPlayerInstance } from "@/types/youtube-iframe";
 
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return "0:00";
@@ -24,8 +25,10 @@ function formatTime(seconds: number): string {
 }
 
 export function PlayerBar() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playerRef = useRef<YTPlayerInstance | null>(null);
+  const isPlayerReadyRef = useRef<boolean>(false);
   const activeTrackIdRef = useRef<string | null>(null);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [hasError, setHasError] = useState(false);
 
   const {
@@ -55,71 +58,237 @@ export function PlayerBar() {
 
   const isLiked = currentTrack ? likedTrackIds.includes(currentTrack.id) : false;
 
+  // 1. Initialize YouTube IFrame API and player instance
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    setHasError(false);
+    if (typeof window === "undefined") return;
 
-    const targetTrackId = currentTrack?.id ?? null;
-    activeTrackIdRef.current = targetTrackId;
+    const initPlayer = () => {
+      if (!window.YT || !window.YT.Player) return;
+      if (playerRef.current) return;
 
-    if (!targetTrackId) {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
+      const container = document.getElementById("yt-hidden-player");
+      if (!container) return;
+
+      try {
+        playerRef.current = new window.YT.Player("yt-hidden-player", {
+          height: "0",
+          width: "0",
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            modestbranding: 1,
+            playsinline: 1,
+            rel: 0,
+            origin: window.location.origin,
+          },
+          events: {
+            onReady: (event) => {
+              isPlayerReadyRef.current = true;
+              const store = usePlayerStore.getState();
+
+              // Initialize volume and mute status
+              if (store.isMuted) {
+                event.target.mute();
+              } else {
+                event.target.unMute();
+                event.target.setVolume(store.volume * 100);
+              }
+
+              // If a track was selected prior to onReady, load and play it
+              if (store.currentTrack) {
+                activeTrackIdRef.current = store.currentTrack.id;
+                event.target.loadVideoById(store.currentTrack.id);
+                if (store.isPlaying) {
+                  event.target.playVideo();
+                } else {
+                  event.target.pauseVideo();
+                }
+              }
+            },
+            onStateChange: (event) => {
+              const state = event.data;
+              const playerState = window.YT?.PlayerState;
+              if (!playerState) return;
+
+              if (state === playerState.PLAYING) {
+                setIsPlaying(true);
+                setHasError(false);
+                const totalDuration = event.target.getDuration();
+                if (totalDuration && totalDuration > 0) {
+                  setDuration(totalDuration);
+                }
+
+                // Poll current time at 250ms to keep progress & synced lyrics aligned
+                if (progressIntervalRef.current) {
+                  clearInterval(progressIntervalRef.current);
+                }
+                progressIntervalRef.current = setInterval(() => {
+                  if (isPlayerReadyRef.current && playerRef.current) {
+                    const currentTime = playerRef.current.getCurrentTime();
+                    if (typeof currentTime === "number" && !isNaN(currentTime)) {
+                      setProgress(currentTime);
+                    }
+                  }
+                }, 250);
+              } else if (state === playerState.PAUSED) {
+                setIsPlaying(false);
+                if (progressIntervalRef.current) {
+                  clearInterval(progressIntervalRef.current);
+                  progressIntervalRef.current = null;
+                }
+              } else if (state === playerState.ENDED) {
+                if (progressIntervalRef.current) {
+                  clearInterval(progressIntervalRef.current);
+                  progressIntervalRef.current = null;
+                }
+
+                const currentRepeat = usePlayerStore.getState().repeatMode;
+                if (currentRepeat === "one") {
+                  event.target.seekTo(0, true);
+                  event.target.playVideo();
+                } else {
+                  usePlayerStore.getState().nextTrack();
+                }
+              }
+            },
+            onError: (event) => {
+              console.warn(
+                "YouTube Player error:",
+                event.data,
+                "Track ID:",
+                activeTrackIdRef.current
+              );
+              setHasError(true);
+              setIsPlaying(false);
+              if (progressIntervalRef.current) {
+                clearInterval(progressIntervalRef.current);
+                progressIntervalRef.current = null;
+              }
+              // Advance to next track after 2 seconds to avoid getting stuck
+              setTimeout(() => {
+                setHasError(false);
+                usePlayerStore.getState().nextTrack();
+              }, 2000);
+            },
+          },
+        });
+      } catch (err) {
+        console.error("Failed to instantiate YouTube player:", err);
+      }
+    };
+
+    if (window.YT && window.YT.Player) {
+      initPlayer();
+    } else {
+      if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+        const tag = document.createElement("script");
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScript = document.getElementsByTagName("script")[0];
+        if (firstScript && firstScript.parentNode) {
+          firstScript.parentNode.insertBefore(tag, firstScript);
+        } else {
+          document.head.appendChild(tag);
+        }
+      }
+
+      const existingCallback = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (typeof existingCallback === "function") {
+          existingCallback();
+        }
+        initPlayer();
+      };
+    }
+
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      if (playerRef.current?.destroy) {
+        try {
+          playerRef.current.destroy();
+        } catch {}
+        playerRef.current = null;
+        isPlayerReadyRef.current = false;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 2. Track changes: load and start playback
+  useEffect(() => {
+    if (!currentTrack) {
+      activeTrackIdRef.current = null;
+      if (isPlayerReadyRef.current && playerRef.current) {
+        playerRef.current.stopVideo?.();
+      }
+      setProgress(0);
+      setDuration(0);
       return;
     }
 
-    // Pause existing stream and reset source cleanly
-    audio.pause();
-    audio.src = `/api/stream?id=${targetTrackId}`;
-    audio.load();
+    activeTrackIdRef.current = currentTrack.id;
+    setHasError(false);
+    setProgress(0);
+    if (currentTrack.duration) {
+      setDuration(currentTrack.duration);
+    }
 
-    if (isPlaying) {
-      audio
-        .play()
-        .catch((err: any) => {
-          // If track changed while async play was resolving, guard against stale track IDs
-          if (activeTrackIdRef.current !== targetTrackId) return;
-
-          // Ignore AbortError when rapidly skipping tracks
-          if (err?.name === "AbortError") return;
-
-          // For NotAllowedError (autoplay policy rejection) or media errors, reset Zustand playing state
-          console.warn("Audio playback interrupted or blocked:", err?.name, err?.message);
-          setIsPlaying(false);
-        });
+    if (isPlayerReadyRef.current && playerRef.current) {
+      try {
+        playerRef.current.loadVideoById(currentTrack.id);
+        if (isPlaying) {
+          playerRef.current.playVideo();
+        }
+      } catch (err) {
+        console.warn("Failed to load video on track change:", err);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack]);
 
+  // 3. Sync store isPlaying changes triggered outside user click
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !currentTrack) return;
+    if (!isPlayerReadyRef.current || !playerRef.current || !currentTrack) return;
+    try {
+      const state = playerRef.current.getPlayerState?.();
+      const playerState = window.YT?.PlayerState;
+      if (!playerState) return;
 
-    if (isPlaying) {
-      if (audio.paused) {
-        audio
-          .play()
-          .catch((err: any) => {
-            if (err?.name === "AbortError") return;
-            console.warn("Audio play blocked by browser policy:", err?.name);
-            setIsPlaying(false);
-          });
+      if (isPlaying) {
+        if (state !== playerState.PLAYING && state !== playerState.BUFFERING) {
+          playerRef.current.playVideo?.();
+        }
+      } else {
+        if (state === playerState.PLAYING || state === playerState.BUFFERING) {
+          playerRef.current.pauseVideo?.();
+        }
       }
-    } else {
-      if (!audio.paused) {
-        audio.pause();
-      }
+    } catch (err) {
+      console.warn("Error syncing isPlaying to YouTube player:", err);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
 
+  // 4. Volume and mute synchronization
   useEffect(() => {
-    if (!audioRef.current) return;
-    audioRef.current.volume = isMuted ? 0 : volume;
+    if (!isPlayerReadyRef.current || !playerRef.current) return;
+    try {
+      if (isMuted) {
+        playerRef.current.mute();
+      } else {
+        playerRef.current.unMute();
+        playerRef.current.setVolume(volume * 100);
+      }
+    } catch (err) {
+      console.warn("Error setting volume on YouTube player:", err);
+    }
   }, [volume, isMuted]);
 
+  // 5. System MediaSession integration
   useEffect(() => {
     if (!currentTrack || typeof window === "undefined" || !("mediaSession" in navigator)) {
       return;
@@ -138,72 +307,93 @@ export function PlayerBar() {
       ],
     });
 
-    navigator.mediaSession.setActionHandler("play", () => setIsPlaying(true));
-    navigator.mediaSession.setActionHandler("pause", () => setIsPlaying(false));
+    navigator.mediaSession.setActionHandler("play", () => {
+      setIsPlaying(true);
+      if (isPlayerReadyRef.current && playerRef.current) {
+        playerRef.current.playVideo?.();
+      }
+    });
+
+    navigator.mediaSession.setActionHandler("pause", () => {
+      setIsPlaying(false);
+      if (isPlayerReadyRef.current && playerRef.current) {
+        playerRef.current.pauseVideo?.();
+      }
+    });
+
     navigator.mediaSession.setActionHandler("previoustrack", () => prevTrack());
     navigator.mediaSession.setActionHandler("nexttrack", () => nextTrack());
     navigator.mediaSession.setActionHandler("seekto", (details) => {
-      if (details.seekTime !== undefined && audioRef.current) {
-        audioRef.current.currentTime = details.seekTime;
+      if (details.seekTime !== undefined) {
         setProgress(details.seekTime);
+        if (isPlayerReadyRef.current && playerRef.current) {
+          playerRef.current.seekTo(details.seekTime, true);
+        }
       }
     });
   }, [currentTrack, nextTrack, prevTrack, setIsPlaying, setProgress]);
 
-  const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      setProgress(audioRef.current.currentTime);
-    }
-  };
+  // 6. Direct user gesture play/pause toggle (guarantees browser autoplay approval)
+  const handleTogglePlay = () => {
+    if (!currentTrack) return;
+    const nextPlaying = !isPlaying;
+    togglePlay();
 
-  const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration || currentTrack?.duration || 0);
-    }
-  };
-
-  const handleEnded = () => {
-    if (repeatMode === "one") {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch((err: any) => {
-          if (err?.name !== "AbortError") {
-            setIsPlaying(false);
-          }
-        });
+    if (isPlayerReadyRef.current && playerRef.current) {
+      try {
+        if (nextPlaying) {
+          playerRef.current.playVideo?.();
+        } else {
+          playerRef.current.pauseVideo?.();
+        }
+      } catch (err) {
+        console.warn("Error executing user gesture play/pause:", err);
       }
-    } else {
-      nextTrack();
     }
   };
 
-  const handleAudioError = () => {
-    console.warn("Audio stream error occurred, resetting state and skipping track:", currentTrack?.id);
-    setHasError(true);
-    setIsPlaying(false);
-    setTimeout(() => {
-      setHasError(false);
-      nextTrack();
-    }, 2000);
-  };
-
+  // 7. Seek slider handler
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = parseFloat(e.target.value);
-    if (audioRef.current) {
-      audioRef.current.currentTime = newTime;
-    }
     setProgress(newTime);
+    if (isPlayerReadyRef.current && playerRef.current) {
+      playerRef.current.seekTo(newTime, true);
+    }
+  };
+
+  // 8. Volume slider handler
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVol = parseFloat(e.target.value);
+    setVolume(newVol);
+    if (isPlayerReadyRef.current && playerRef.current) {
+      if (isMuted && newVol > 0) {
+        toggleMute();
+        playerRef.current.unMute();
+      }
+      playerRef.current.setVolume(newVol * 100);
+    }
+  };
+
+  // 9. Mute button toggle
+  const handleToggleMute = () => {
+    const nextMuted = !isMuted;
+    toggleMute();
+    if (isPlayerReadyRef.current && playerRef.current) {
+      if (nextMuted) {
+        playerRef.current.mute();
+      } else {
+        playerRef.current.unMute();
+        playerRef.current.setVolume(volume * 100);
+      }
+    }
   };
 
   return (
     <>
-      <audio
-        ref={audioRef}
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleLoadedMetadata}
-        onEnded={handleEnded}
-        onError={handleAudioError}
-        preload="auto"
+      {/* Hidden YouTube IFrame Player */}
+      <div
+        id="yt-hidden-player"
+        className="hidden pointer-events-none w-0 h-0 overflow-hidden"
       />
 
       {/* Floating Dynamic Island Player Dock */}
@@ -274,7 +464,7 @@ export function PlayerBar() {
                 <SkipBack className="w-4 h-4 fill-current" />
               </button>
               <button
-                onClick={togglePlay}
+                onClick={handleTogglePlay}
                 disabled={!currentTrack}
                 className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-tr from-aether-gold-muted via-aether-gold to-aether-gold-hover hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center text-black shadow-gold-glow disabled:opacity-30 shrink-0"
                 title={isPlaying ? "Pause" : "Play"}
@@ -349,7 +539,7 @@ export function PlayerBar() {
           {/* Volume slider (desktop only, phones have physical rockers) */}
           <div className="hidden md:flex items-center gap-2 group w-24 lg:w-28">
             <button
-              onClick={toggleMute}
+              onClick={handleToggleMute}
               className="text-aether-muted hover:text-white transition shrink-0"
             >
               {isMuted || volume === 0 ? (
@@ -364,7 +554,7 @@ export function PlayerBar() {
               max={1}
               step={0.01}
               value={isMuted ? 0 : volume}
-              onChange={(e) => setVolume(parseFloat(e.target.value))}
+              onChange={handleVolumeChange}
               className="w-full"
             />
           </div>
