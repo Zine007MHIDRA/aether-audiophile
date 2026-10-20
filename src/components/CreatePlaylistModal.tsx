@@ -1,37 +1,369 @@
 "use client";
 
-import React, { useState } from "react";
-import { X, Plus, Music, Sparkles } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  X,
+  Plus,
+  Music,
+  Sparkles,
+  Link2,
+  FileText,
+  UploadCloud,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Disc,
+  ArrowRight,
+} from "lucide-react";
 import { usePlaylistStore } from "@/store/playlist-store";
 import { useRouter } from "next/navigation";
+import { Track } from "@/types/music";
 
 export function CreatePlaylistModal() {
-  const { isCreateModalOpen, closeCreateModal, createPlaylist } = usePlaylistStore();
+  const {
+    isCreateModalOpen,
+    closeCreateModal,
+    createPlaylist,
+    importPlaylist,
+    initialTab,
+  } = usePlaylistStore();
+
+  const router = useRouter();
+
+  // Tab states
+  const [mainTab, setMainTab] = useState<"create" | "import">("create");
+  const [importSubTab, setImportSubTab] = useState<"url" | "file" | "text">("url");
+
+  // Create Blank states
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [blankLoading, setBlankLoading] = useState(false);
+
+  // Import URL states
+  const [urlInput, setUrlInput] = useState("");
+  const [urlLoading, setUrlLoading] = useState(false);
+
+  // Import File states
+  const [file, setFile] = useState<File | null>(null);
+  const [filePlaylistName, setFilePlaylistName] = useState("");
+  const [parsedFileQueries, setParsedFileQueries] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Import Text states
+  const [textInput, setTextInput] = useState("");
+  const [textPlaylistName, setTextPlaylistName] = useState("");
+
+  // Common Import / Progress states
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [matchedCount, setMatchedCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const cancelRef = useRef(false);
+
+  // Sync tab on open
+  useEffect(() => {
+    if (isCreateModalOpen) {
+      setMainTab(initialTab || "create");
+      setError(null);
+      setProgress(null);
+      setIsProcessing(false);
+      setUrlInput("");
+      setFile(null);
+      setParsedFileQueries([]);
+      setTextInput("");
+      setTextPlaylistName("");
+      setFilePlaylistName("");
+      cancelRef.current = false;
+    }
+  }, [isCreateModalOpen, initialTab]);
 
   if (!isCreateModalOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // ---------------------------------------------------------------------------
+  // Helper: CSV Parser
+  // ---------------------------------------------------------------------------
+  const parseCSV = (csvText: string): string[] => {
+    const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length < 2) return [];
+
+    const parseLine = (line: string): string[] => {
+      const res: string[] = [];
+      let cur = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            cur += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === "," && !inQuotes) {
+          res.push(cur.trim());
+          cur = "";
+        } else {
+          cur += char;
+        }
+      }
+      res.push(cur.trim());
+      return res;
+    };
+
+    const headers = parseLine(lines[0]).map((h) => h.toLowerCase());
+    let trackIdx = headers.findIndex(
+      (h) => h === "track name" || h === "title" || h === "song" || h === "track"
+    );
+    let artistIdx = headers.findIndex(
+      (h) =>
+        h === "artist name(s)" ||
+        h === "artist name" ||
+        h === "artist" ||
+        h === "artists"
+    );
+
+    if (trackIdx === -1) trackIdx = 0;
+    if (artistIdx === -1) artistIdx = 1;
+
+    const queries: string[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseLine(lines[i]);
+      const title = cols[trackIdx];
+      const artist = cols[artistIdx] || "";
+      if (title && title.length > 0) {
+        queries.push(`${title} ${artist}`.trim());
+      }
+    }
+    return queries;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Helper: M3U / TXT Parser
+  // ---------------------------------------------------------------------------
+  const parseM3UOrTxt = (text: string): string[] => {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const queries: string[] = [];
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (line.startsWith("#EXTINF:")) {
+        const commaIdx = line.indexOf(",");
+        if (commaIdx !== -1) {
+          const item = line.slice(commaIdx + 1).trim();
+          if (item) queries.push(item);
+        }
+      } else if (!line.startsWith("#")) {
+        // Strip file paths and extensions
+        const cleaned = line
+          .replace(/^.*[\\/]/, "")
+          .replace(/\.(mp3|flac|m4a|wav|aac|ogg|opus)$/i, "")
+          .replace(/^\d+[\.\-\s]+/, "")
+          .trim();
+        if (cleaned) queries.push(cleaned);
+      }
+    }
+    return queries;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Batch Track Matcher & Ingestion
+  // ---------------------------------------------------------------------------
+  const matchAndImportBatch = async (
+    playlistName: string,
+    queries: string[],
+    coverUrl?: string
+  ) => {
+    if (queries.length === 0) {
+      setError("No compositions found to import.");
+      return;
+    }
+
+    setIsProcessing(true);
+    setError(null);
+    setProgress({ current: 0, total: queries.length });
+    setMatchedCount(0);
+    cancelRef.current = false;
+
+    const resolvedTracks: Track[] = [];
+    const seenIds = new Set<string>();
+    const batchSize = 4;
+
+    for (let i = 0; i < queries.length; i += batchSize) {
+      if (cancelRef.current) break;
+
+      const currentBatch = queries.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        currentBatch.map(async (query) => {
+          try {
+            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+            if (!res.ok) return null;
+            const data = await res.json();
+            const first = data.tracks?.[0];
+            return first || null;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      for (const t of batchResults) {
+        if (t && !seenIds.has(t.id)) {
+          seenIds.add(t.id);
+          resolvedTracks.push(t);
+        }
+      }
+
+      setMatchedCount(resolvedTracks.length);
+      setProgress({
+        current: Math.min(i + batchSize, queries.length),
+        total: queries.length,
+      });
+    }
+
+    if (cancelRef.current) {
+      setIsProcessing(false);
+      setProgress(null);
+      return;
+    }
+
+    if (resolvedTracks.length === 0) {
+      setIsProcessing(false);
+      setError("Could not match any compositions in the Aether catalog.");
+      return;
+    }
+
+    try {
+      const finalName = playlistName.trim() || "Imported Playlist";
+      const newId = await importPlaylist(finalName, resolvedTracks, coverUrl);
+      setIsProcessing(false);
+      closeCreateModal();
+      router.push(`/playlist/${newId}`);
+    } catch (e: any) {
+      setIsProcessing(false);
+      setError(`Failed to save playlist: ${e?.message || "Unknown error"}`);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
+  const handleBlankSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    setLoading(true);
+    setBlankLoading(true);
     const created = await createPlaylist(name.trim(), description.trim());
-    setLoading(false);
+    setBlankLoading(false);
 
     if (created) {
       setName("");
       setDescription("");
+      closeCreateModal();
       router.push(`/playlist/${created.id}`);
     }
   };
 
+  const handleUrlImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanUrl = urlInput.trim();
+    if (!cleanUrl) return;
+
+    setUrlLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: cleanUrl }),
+      });
+
+      const data = await res.json();
+      setUrlLoading(false);
+
+      if (!res.ok) {
+        setError(data.error || "Failed to parse playlist URL");
+        return;
+      }
+
+      if (!data.needsMatching && Array.isArray(data.tracks)) {
+        // Direct YouTube track import!
+        setIsProcessing(true);
+        const newId = await importPlaylist(data.name, data.tracks, data.coverUrl);
+        setIsProcessing(false);
+        closeCreateModal();
+        router.push(`/playlist/${newId}`);
+      } else if (data.needsMatching && Array.isArray(data.queries)) {
+        // Spotify / Deezer / Apple Music batch matching
+        await matchAndImportBatch(data.name, data.queries, data.coverUrl);
+      } else {
+        setError("Invalid response format received from import service.");
+      }
+    } catch (err: any) {
+      setUrlLoading(false);
+      setError(err?.message || "An error occurred during import.");
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (!selected) return;
+
+    setFile(selected);
+    setError(null);
+
+    const baseName = selected.name.replace(/\.[^/.]+$/, "");
+    setFilePlaylistName(baseName);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const content = evt.target?.result as string;
+      if (!content) return;
+
+      let queries: string[] = [];
+      if (selected.name.endsWith(".csv")) {
+        queries = parseCSV(content);
+      } else {
+        queries = parseM3UOrTxt(content);
+      }
+      setParsedFileQueries(queries);
+    };
+    reader.readAsText(selected);
+  };
+
+  const handleFileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (parsedFileQueries.length === 0) {
+      setError("Please select a valid CSV, M3U, or TXT file with tracks.");
+      return;
+    }
+    await matchAndImportBatch(
+      filePlaylistName || file?.name || "Imported Collection",
+      parsedFileQueries
+    );
+  };
+
+  const handleTextSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const lines = textInput
+      .split(/\r?\n/)
+      .map((l) => l.trim().replace(/^\d+[\.\-\s]+/, "").trim())
+      .filter((l) => l.length > 0);
+
+    if (lines.length === 0) {
+      setError("Please paste at least one track line.");
+      return;
+    }
+
+    await matchAndImportBatch(
+      textPlaylistName.trim() || "Imported Tracklist",
+      lines
+    );
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-200 select-none">
-      <div className="w-full max-w-md bg-aether-surface border border-aether-gold/30 rounded-3xl p-7 shadow-2xl relative flex flex-col gap-5">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-200 select-none">
+      <div className="w-full max-w-lg bg-aether-surface border border-aether-gold/30 rounded-3xl p-6 sm:p-7 shadow-2xl relative flex flex-col gap-5 max-h-[90vh] overflow-y-auto">
         <button
           onClick={closeCreateModal}
           className="absolute top-5 right-5 p-2 rounded-full hover:bg-aether-elevated text-aether-muted hover:text-white transition"
@@ -39,63 +371,396 @@ export function CreatePlaylistModal() {
           <X className="w-4 h-4" />
         </button>
 
+        {/* Modal Header */}
         <div className="flex flex-col gap-1.5 pt-1">
           <div className="flex items-center gap-2 text-aether-gold text-[10px] font-mono tracking-widest uppercase">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Curate Collection</span>
+            <span>Audiophile Curation</span>
           </div>
           <h2 className="text-2xl font-bold text-white tracking-tight">
-            Create Playlist
+            {mainTab === "create" ? "Create New Playlist" : "Import Playlist"}
           </h2>
           <p className="text-aether-subdued text-xs">
-            Assemble your own private tracklist in the Aether cloud.
+            {mainTab === "create"
+              ? "Assemble a private bespoke collection in your studio."
+              : "Import tracklists from Spotify, YouTube, Apple Music, Deezer, or CSV files."}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-2">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
-              Playlist Title
-            </label>
-            <input
-              type="text"
-              required
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Late Night Nocturne"
-              className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-3 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition"
-            />
+        {/* Top-Level Tabs (Create Blank vs Import) */}
+        {!isProcessing && (
+          <div className="flex items-center border-b border-aether-border/60 gap-6 mt-1">
+            <button
+              onClick={() => {
+                setMainTab("create");
+                setError(null);
+              }}
+              className={`flex items-center gap-2 pb-3 font-semibold text-xs uppercase tracking-wider transition-all relative ${
+                mainTab === "create"
+                  ? "text-aether-gold border-b-2 border-aether-gold"
+                  : "text-aether-muted hover:text-white border-b-2 border-transparent"
+              }`}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Create Blank</span>
+            </button>
+            <button
+              onClick={() => {
+                setMainTab("import");
+                setError(null);
+              }}
+              className={`flex items-center gap-2 pb-3 font-semibold text-xs uppercase tracking-wider transition-all relative ${
+                mainTab === "import"
+                  ? "text-aether-gold border-b-2 border-aether-gold"
+                  : "text-aether-muted hover:text-white border-b-2 border-transparent"
+              }`}
+            >
+              <UploadCloud className="w-3.5 h-3.5" />
+              <span>Import Playlist</span>
+            </button>
           </div>
+        )}
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
-              Description (Optional)
-            </label>
-            <textarea
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Atmospheric soundscapes for focus and nocturnal sessions..."
-              className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-2.5 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition resize-none"
-            />
+        {/* Error Alert */}
+        {error && (
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-950/40 border border-rose-800/40 text-rose-300 text-xs animate-in fade-in">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+            <span>{error}</span>
           </div>
+        )}
 
-          <button
-            type="submit"
-            disabled={loading || !name.trim()}
-            className="flex items-center justify-center gap-2 w-full mt-2 bg-gradient-to-r from-aether-gold-hover via-aether-gold to-aether-gold-muted text-black font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-gold-glow hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
-          >
-            {loading ? (
-              <span className="animate-pulse">Creating...</span>
-            ) : (
-              <>
-                <Plus className="w-4 h-4 text-black" />
-                <span>Create Playlist</span>
-              </>
+        {/* ================================================================= */}
+        {/* Processing / Progress State                                       */}
+        {/* ================================================================= */}
+        {isProcessing && (
+          <div className="flex flex-col items-center justify-center py-8 px-4 gap-5 text-center">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-aether-gold/20 via-aether-gold/5 to-transparent border border-aether-gold/40 flex items-center justify-center text-aether-gold shadow-gold-glow animate-pulse">
+                <Disc className="w-8 h-8 animate-spin text-aether-gold" />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5 max-w-sm">
+              <h3 className="text-base font-bold text-white tracking-tight">
+                Matching Compositions
+              </h3>
+              <p className="text-aether-subdued text-xs">
+                Searching Aether catalog with high-fidelity 24-bit audio matching...
+              </p>
+            </div>
+
+            {progress && (
+              <div className="w-full max-w-md flex flex-col gap-2">
+                <div className="flex items-center justify-between text-[11px] font-mono text-aether-muted">
+                  <span className="text-aether-gold">
+                    Importing & matching: {progress.current} / {progress.total}
+                  </span>
+                  <span>
+                    {Math.round((progress.current / progress.total) * 100)}%
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+                  <div
+                    className="h-full bg-gradient-to-r from-aether-gold-muted via-aether-gold to-aether-gold-hover transition-all duration-200"
+                    style={{
+                      width: `${(progress.current / progress.total) * 100}%`,
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-aether-subdued">
+                  <span>{matchedCount} matched compositions</span>
+                  <button
+                    onClick={() => {
+                      cancelRef.current = true;
+                    }}
+                    className="text-rose-400 hover:underline"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             )}
-          </button>
-        </form>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* Tab 1: Create Blank Form                                          */}
+        {/* ================================================================= */}
+        {!isProcessing && mainTab === "create" && (
+          <form onSubmit={handleBlankSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
+                Playlist Title
+              </label>
+              <input
+                type="text"
+                required
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Late Night Nocturne"
+                className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-3 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
+                Description (Optional)
+              </label>
+              <textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Atmospheric soundscapes for focus and nocturnal sessions..."
+                className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-2.5 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition resize-none"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={blankLoading || !name.trim()}
+              className="flex items-center justify-center gap-2 w-full mt-2 bg-gradient-to-r from-aether-gold-hover via-aether-gold to-aether-gold-muted text-black font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-gold-glow hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              {blankLoading ? (
+                <span className="animate-pulse">Creating...</span>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 text-black" />
+                  <span>Create Playlist</span>
+                </>
+              )}
+            </button>
+          </form>
+        )}
+
+        {/* ================================================================= */}
+        {/* Tab 2: Import Playlist Form                                       */}
+        {/* ================================================================= */}
+        {!isProcessing && mainTab === "import" && (
+          <div className="flex flex-col gap-4">
+            {/* Import Sub-Option Selector */}
+            <div className="grid grid-cols-3 gap-2 bg-aether-dark/80 p-1 rounded-2xl border border-aether-border/60">
+              <button
+                type="button"
+                onClick={() => {
+                  setImportSubTab("url");
+                  setError(null);
+                }}
+                className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-medium transition ${
+                  importSubTab === "url"
+                    ? "bg-aether-surface text-aether-gold border border-aether-gold/30 shadow-sm"
+                    : "text-aether-muted hover:text-white"
+                }`}
+              >
+                <Link2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">URL Link</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportSubTab("file");
+                  setError(null);
+                }}
+                className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-medium transition ${
+                  importSubTab === "file"
+                    ? "bg-aether-surface text-aether-gold border border-aether-gold/30 shadow-sm"
+                    : "text-aether-muted hover:text-white"
+                }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">CSV / M3U</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportSubTab("text");
+                  setError(null);
+                }}
+                className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-medium transition ${
+                  importSubTab === "text"
+                    ? "bg-aether-surface text-aether-gold border border-aether-gold/30 shadow-sm"
+                    : "text-aether-muted hover:text-white"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Tracklist</span>
+              </button>
+            </div>
+
+            {/* ------------------------------------------------------------- */}
+            {/* Sub-option A: URL Input                                        */}
+            {/* ------------------------------------------------------------- */}
+            {importSubTab === "url" && (
+              <form onSubmit={handleUrlImport} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
+                    <span>Supported Platforms</span>
+                    <span className="text-aether-gold">Direct & Batch</span>
+                  </div>
+                  {/* Platform Pills */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="px-2 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                      YouTube / Music
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Spotify
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+                      Apple Music
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                      Deezer
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
+                    Paste Playlist Web Link
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    placeholder="https://open.spotify.com/playlist/... or youtube.com/playlist?list=..."
+                    className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-3 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={urlLoading || !urlInput.trim()}
+                  className="flex items-center justify-center gap-2 w-full mt-2 bg-gradient-to-r from-aether-gold-hover via-aether-gold to-aether-gold-muted text-black font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-gold-glow hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  {urlLoading ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-black" />
+                      <span>Parsing Playlist...</span>
+                    </span>
+                  ) : (
+                    <>
+                      <ArrowRight className="w-4 h-4 text-black" />
+                      <span>Fetch & Import Playlist</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* ------------------------------------------------------------- */}
+            {/* Sub-option B: File Dropzone                                    */}
+            {/* ------------------------------------------------------------- */}
+            {importSubTab === "file" && (
+              <form onSubmit={handleFileSubmit} className="flex flex-col gap-4">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".csv,.m3u,.m3u8,.txt"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-aether-border/70 hover:border-aether-gold/70 rounded-2xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2.5 bg-aether-dark/40 hover:bg-aether-dark/70"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-aether-surface border border-aether-gold/30 flex items-center justify-center text-aether-gold">
+                    <UploadCloud className="w-6 h-6" />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-white text-xs font-semibold">
+                      {file ? file.name : "Click or drop Exportify CSV / .M3U file"}
+                    </span>
+                    <span className="text-aether-muted text-[10px]">
+                      Supports Spotify Exportify CSV, .m3u, .m3u8, or plain text
+                    </span>
+                  </div>
+                </div>
+
+                {parsedFileQueries.length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between text-xs px-1">
+                      <span className="text-aether-gold font-mono text-[11px]">
+                        ✓ {parsedFileQueries.length} compositions detected
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
+                        Playlist Name
+                      </label>
+                      <input
+                        type="text"
+                        value={filePlaylistName}
+                        onChange={(e) => setFilePlaylistName(e.target.value)}
+                        placeholder="Exported Collection"
+                        className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-2.5 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="flex items-center justify-center gap-2 w-full mt-1 bg-gradient-to-r from-aether-gold-hover via-aether-gold to-aether-gold-muted text-black font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-gold-glow hover:scale-[1.02] active:scale-[0.98] transition-all"
+                    >
+                      <ArrowRight className="w-4 h-4 text-black" />
+                      <span>Import {parsedFileQueries.length} Compositions</span>
+                    </button>
+                  </div>
+                )}
+              </form>
+            )}
+
+            {/* ------------------------------------------------------------- */}
+            {/* Sub-option C: Plain Text Tracklist                             */}
+            {/* ------------------------------------------------------------- */}
+            {importSubTab === "text" && (
+              <form onSubmit={handleTextSubmit} className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
+                    Playlist Title
+                  </label>
+                  <input
+                    type="text"
+                    value={textPlaylistName}
+                    onChange={(e) => setTextPlaylistName(e.target.value)}
+                    placeholder="e.g. My Vinyl Favorites"
+                    className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-2.5 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
+                    <span>Paste Compositions (One per line)</span>
+                    <span className="text-aether-gold">
+                      {textInput.split(/\r?\n/).filter((l) => l.trim()).length} lines
+                    </span>
+                  </div>
+                  <textarea
+                    rows={6}
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    placeholder={`Daft Punk - Get Lucky\nThe Weeknd - Blinding Lights\nFleetwood Mac - Dreams\nRadiohead - Weird Fishes`}
+                    className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-2.5 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition resize-none font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!textInput.trim()}
+                  className="flex items-center justify-center gap-2 w-full mt-1 bg-gradient-to-r from-aether-gold-hover via-aether-gold to-aether-gold-muted text-black font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-gold-glow hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  <ArrowRight className="w-4 h-4 text-black" />
+                  <span>Parse & Import Tracklist</span>
+                </button>
+              </form>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

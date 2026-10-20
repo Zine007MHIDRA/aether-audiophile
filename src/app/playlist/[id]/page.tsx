@@ -22,31 +22,58 @@ export default function PlaylistPage() {
   const deletePlaylist = usePlaylistStore((state) => state.deletePlaylist);
 
   useEffect(() => {
-    if (!id || !isSupabaseConfigured()) {
+    if (!id) {
       setLoading(false);
       return;
     }
-    const supabase = createClient();
 
-    // Fetch playlist details
-    supabase
-      .from("playlists")
-      .select("id, name, description, created_at")
-      .eq("id", id)
-      .single()
-      .then(({ data }) => {
-        if (data) setPlaylist(data as Playlist);
-      });
+    // 1. Check local playlist from Zustand store
+    const local = usePlaylistStore
+      .getState()
+      .playlists.find((p) => p.id === id);
 
-    // Fetch playlist tracks
-    supabase
-      .from("playlist_tracks")
-      .select("track_id, title, artist, thumbnail, duration, position")
-      .eq("playlist_id", id)
-      .order("position", { ascending: true })
-      .then(({ data }) => {
-        if (data) {
-          const list: Track[] = data.map((d: any) => ({
+    if (local && local.tracks && local.tracks.length > 0) {
+      setPlaylist(local);
+      setTracks(local.tracks);
+      setLoading(false);
+      return;
+    }
+
+    if (!isSupabaseConfigured()) {
+      if (local) {
+        setPlaylist(local);
+        setTracks(local.tracks || []);
+      }
+      setLoading(false);
+      return;
+    }
+
+    const loadPlaylistData = async () => {
+      try {
+        const supabase = createClient();
+
+        // Fetch playlist details
+        const { data: plData } = await supabase
+          .from("playlists")
+          .select("id, name, description, created_at")
+          .eq("id", id)
+          .single();
+
+        if (plData) {
+          setPlaylist(plData as Playlist);
+        } else if (local) {
+          setPlaylist(local);
+        }
+
+        // Fetch playlist tracks
+        const { data: trData } = await supabase
+          .from("playlist_tracks")
+          .select("track_id, title, artist, thumbnail, duration, position")
+          .eq("playlist_id", id)
+          .order("position", { ascending: true });
+
+        if (trData && trData.length > 0) {
+          const list: Track[] = trData.map((d: any) => ({
             id: d.track_id,
             title: d.title,
             artist: d.artist,
@@ -55,9 +82,19 @@ export default function PlaylistPage() {
             durationFormatted: `${Math.floor((d.duration || 0) / 60)}:${(d.duration || 0) % 60 < 10 ? "0" : ""}${(d.duration || 0) % 60}`,
           }));
           setTracks(list);
+        } else if (local?.tracks) {
+          setTracks(local.tracks);
         }
+      } catch {
+        if (local?.tracks) {
+          setTracks(local.tracks);
+        }
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    loadPlaylistData();
   }, [id]);
 
   const handleDelete = async () => {
@@ -71,8 +108,16 @@ export default function PlaylistPage() {
       {/* Header Banner */}
       <div className="bg-gradient-to-b from-aether-surface via-aether-elevated to-aether-dark p-6 md:p-12 flex flex-col sm:flex-row sm:items-end justify-between gap-6 border-b border-aether-border/30">
         <div className="flex items-center sm:items-end gap-5">
-          <div className="w-24 h-24 sm:w-36 sm:h-36 md:w-44 md:h-44 rounded-2xl bg-gradient-to-br from-aether-surface via-aether-elevated to-aether-highlight border border-aether-gold/40 flex items-center justify-center text-aether-gold shadow-gold-glow shrink-0">
-            <ListMusic className="w-10 h-10 sm:w-16 sm:h-16 text-aether-gold" />
+          <div className="w-24 h-24 sm:w-36 sm:h-36 md:w-44 md:h-44 rounded-2xl bg-gradient-to-br from-aether-surface via-aether-elevated to-aether-highlight border border-aether-gold/40 flex items-center justify-center text-aether-gold shadow-gold-glow shrink-0 overflow-hidden">
+            {playlist?.coverUrl ? (
+              <img
+                src={playlist.coverUrl}
+                alt={playlist.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <ListMusic className="w-10 h-10 sm:w-16 sm:h-16 text-aether-gold" />
+            )}
           </div>
           <div className="flex flex-col gap-1 sm:gap-2 max-w-xl">
             <div className="flex items-center gap-2 text-aether-gold text-[10px] font-mono tracking-widest uppercase">

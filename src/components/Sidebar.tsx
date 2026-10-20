@@ -3,7 +3,17 @@
 import React, { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, Search, Bookmark, Plus, ListMusic, User, LogOut, LogIn } from "lucide-react";
+import {
+  Compass,
+  Search,
+  Bookmark,
+  Plus,
+  ListMusic,
+  User,
+  LogOut,
+  LogIn,
+  UploadCloud,
+} from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { useAuthStore } from "@/store/auth-store";
 import { usePlaylistStore } from "@/store/playlist-store";
@@ -12,7 +22,12 @@ export function Sidebar() {
   const pathname = usePathname();
   const likedCount = usePlayerStore((state) => state.likedTrackIds.length);
   const { user, openAuthModal, signOut, initAuth } = useAuthStore();
-  const { playlists, openCreateModal, fetchPlaylists } = usePlaylistStore();
+  const {
+    playlists,
+    openCreateModal,
+    openImportModal,
+    fetchPlaylists,
+  } = usePlaylistStore();
 
   useEffect(() => {
     initAuth();
@@ -99,39 +114,77 @@ export function Sidebar() {
             <span className="text-[10px] font-semibold text-aether-muted uppercase tracking-[0.2em]">
               Playlists
             </span>
-            <button
-              onClick={openCreateModal}
-              className="p-1 rounded-md text-aether-subdued hover:text-aether-gold hover:bg-aether-elevated transition"
-              title="Create New Playlist"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={openImportModal}
+                className="p-1 rounded-md text-aether-subdued hover:text-aether-gold hover:bg-aether-elevated transition"
+                title="Import Playlist (Spotify, YouTube, Deezer, Apple Music, CSV)"
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => openCreateModal("create")}
+                className="p-1 rounded-md text-aether-subdued hover:text-aether-gold hover:bg-aether-elevated transition"
+                title="Create New Blank Playlist"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-col gap-1 overflow-y-auto max-h-48 pr-1">
             {playlists.length === 0 ? (
-              <button
-                onClick={openCreateModal}
-                className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs text-aether-muted hover:text-aether-gold hover:bg-aether-elevated/40 transition text-left"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="text-[11px]">New Playlist...</span>
-              </button>
-            ) : (
-              playlists.map((pl) => (
-                <Link
-                  key={pl.id}
-                  href={`/playlist/${pl.id}`}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs truncate transition ${
-                    pathname === `/playlist/${pl.id}`
-                      ? "text-aether-gold bg-aether-gold-glow/40 border border-aether-gold/20"
-                      : "text-aether-subdued hover:text-white hover:bg-aether-elevated/50"
-                  }`}
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => openCreateModal("create")}
+                  className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs text-aether-muted hover:text-aether-gold hover:bg-aether-elevated/40 transition text-left"
                 >
-                  <ListMusic className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{pl.name}</span>
-                </Link>
-              ))
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">New Playlist...</span>
+                </button>
+                <button
+                  onClick={openImportModal}
+                  className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs text-aether-muted hover:text-aether-gold hover:bg-aether-elevated/40 transition text-left"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">Import Playlist...</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                {playlists.map((pl) => (
+                  <Link
+                    key={pl.id}
+                    href={`/playlist/${pl.id}`}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs truncate transition ${
+                      pathname === `/playlist/${pl.id}`
+                        ? "text-aether-gold bg-aether-gold-glow/40 border border-aether-gold/20"
+                        : "text-aether-subdued hover:text-white hover:bg-aether-elevated/50"
+                    }`}
+                  >
+                    <ListMusic className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{pl.name}</span>
+                  </Link>
+                ))}
+                <div className="pt-1.5 flex items-center gap-1 border-t border-aether-border/20 mt-1">
+                  <button
+                    onClick={() => openCreateModal("create")}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] text-aether-muted hover:text-aether-gold hover:bg-aether-elevated/40 transition"
+                    title="Create New Playlist"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>New</span>
+                  </button>
+                  <button
+                    onClick={openImportModal}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] text-aether-muted hover:text-aether-gold hover:bg-aether-elevated/40 transition"
+                    title="Import Playlist"
+                  >
+                    <UploadCloud className="w-3 h-3" />
+                    <span>Import</span>
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>
