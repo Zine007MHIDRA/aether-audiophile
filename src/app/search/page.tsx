@@ -53,7 +53,7 @@ export default function SearchPage() {
   const isTopPlaying = currentTrack?.id === topResult?.id && isPlaying;
 
   return (
-    <div className="flex-1 p-8 flex flex-col gap-8">
+    <div className="flex-1 p-6 md:p-8 flex flex-col gap-8 pb-36">
       {/* Search Input Bar */}
       <div className="relative max-w-lg">
         <SearchIcon className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-aether-gold" />
@@ -94,29 +94,39 @@ export default function SearchPage() {
                 </span>
                 <div
                   onClick={() => playTrack(topResult, results)}
-                  className="group bg-aether-surface/50 hover:bg-aether-surface border border-aether-border/40 hover:border-aether-gold/30 p-6 rounded-2xl flex flex-col justify-between cursor-pointer transition relative shadow-lg"
+                  className="group bg-aether-surface/50 hover:bg-aether-surface border border-aether-border/40 hover:border-aether-gold/30 p-6 rounded-2xl flex flex-col justify-between cursor-pointer transition relative shadow-xl overflow-hidden"
                 >
-                  <div className="w-24 h-24 rounded-xl overflow-hidden bg-aether-highlight shadow-md mb-5 border border-aether-border/60">
+                  {/* Subtle Ambient Gold Radial Glow Behind Artwork */}
+                  <div className="absolute top-4 left-4 w-36 h-36 bg-[#D4AF37]/20 rounded-full blur-2xl pointer-events-none group-hover:bg-[#D4AF37]/30 transition-all duration-500" />
+
+                  {/* Artwork Container */}
+                  <div className="relative w-28 h-28 rounded-xl overflow-hidden bg-aether-highlight shadow-xl mb-5 border border-white/10 group-hover:border-[#D4AF37]/40 transition-all duration-300 shrink-0 z-10">
                     <img
                       src={topResult.thumbnail}
                       alt={topResult.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                   </div>
-                  <div>
+
+                  {/* Metadata */}
+                  <div className="z-10 pr-12">
                     <h3 className="text-xl font-bold text-white tracking-tight truncate">
                       {topResult.title}
                     </h3>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[9px] font-mono text-aether-gold bg-aether-gold/10 border border-aether-gold/20 px-2 py-0.5 rounded uppercase">
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <span className="text-[9px] font-mono font-semibold text-[#D4AF37] bg-[#D4AF37]/15 border border-[#D4AF37]/30 px-2 py-0.5 rounded tracking-wider uppercase">
                         Master
                       </span>
-                      <span className="text-aether-subdued text-xs truncate">
+                      <span className="text-[9px] font-mono font-semibold text-[#F3E5AB] bg-[#D4AF37]/10 border border-[#D4AF37]/25 px-2 py-0.5 rounded tracking-wider uppercase">
+                        24-Bit / 96kHz Hi-Res
+                      </span>
+                      <span className="text-zinc-400 text-xs truncate">
                         {topResult.artist}
                       </span>
                     </div>
                   </div>
 
+                  {/* Floating Circular Gold Play/Pause Button */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -126,19 +136,20 @@ export default function SearchPage() {
                         playTrack(topResult, results);
                       }
                     }}
-                    className="absolute bottom-6 right-6 w-11 h-11 rounded-full bg-gradient-to-tr from-aether-gold-muted via-aether-gold to-aether-gold-hover text-black flex items-center justify-center shadow-gold-glow opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0"
+                    className="absolute bottom-6 right-6 w-12 h-12 rounded-full bg-gradient-to-tr from-[#C5A059] via-[#D4AF37] to-[#F3E5AB] text-black flex items-center justify-center shadow-[0_8px_24px_rgba(212,175,55,0.45)] hover:scale-110 active:scale-95 transition-all duration-200 z-10"
+                    title={isTopPlaying ? "Pause" : "Play"}
                   >
                     {isTopPlaying ? (
-                      <Pause className="w-4 h-4 fill-black text-black" />
+                      <Pause className="w-5 h-5 fill-black text-black" />
                     ) : (
-                      <Play className="w-4 h-4 fill-black text-black ml-0.5" />
+                      <Play className="w-5 h-5 fill-black text-black ml-0.5" />
                     )}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Songs List */}
+            {/* Compositions Songs List */}
             <div className="lg:col-span-2 flex flex-col gap-3">
               <span className="text-[10px] font-semibold text-aether-muted uppercase tracking-[0.2em]">
                 Compositions
@@ -156,7 +167,7 @@ export default function SearchPage() {
             </div>
           </div>
 
-          {/* More Tracks */}
+          {/* Extended Discography List */}
           {results.length > 5 && (
             <div className="flex flex-col gap-3">
               <span className="text-[10px] font-semibold text-aether-muted uppercase tracking-[0.2em]">

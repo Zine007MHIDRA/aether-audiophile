@@ -57,6 +57,10 @@ export function PlayerBar() {
   } = usePlayerStore();
 
   const isLiked = currentTrack ? likedTrackIds.includes(currentTrack.id) : false;
+  const currentTime = progress;
+  const progressPercent =
+    duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+  const volumePercent = (isMuted ? 0 : volume) * 100;
 
   // 1. Initialize YouTube IFrame API and player instance
   useEffect(() => {
@@ -126,9 +130,15 @@ export function PlayerBar() {
                 }
                 progressIntervalRef.current = setInterval(() => {
                   if (isPlayerReadyRef.current && playerRef.current) {
-                    const currentTime = playerRef.current.getCurrentTime();
-                    if (typeof currentTime === "number" && !isNaN(currentTime)) {
-                      setProgress(currentTime);
+                    const time = playerRef.current.getCurrentTime();
+                    if (typeof time === "number" && !isNaN(time)) {
+                      setProgress(time);
+                    }
+                    const curState = playerRef.current.getPlayerState?.();
+                    if (curState === playerState.PLAYING && !usePlayerStore.getState().isPlaying) {
+                      setIsPlaying(true);
+                    } else if (curState === playerState.PAUSED && usePlayerStore.getState().isPlaying) {
+                      setIsPlaying(false);
                     }
                   }
                 }, 250);
@@ -149,6 +159,7 @@ export function PlayerBar() {
                   event.target.seekTo(0, true);
                   event.target.playVideo();
                 } else {
+                  setIsPlaying(false);
                   usePlayerStore.getState().nextTrack();
                 }
               }
@@ -337,7 +348,7 @@ export function PlayerBar() {
   const handleTogglePlay = () => {
     if (!currentTrack) return;
     const nextPlaying = !isPlaying;
-    togglePlay();
+    setIsPlaying(nextPlaying);
 
     if (isPlayerReadyRef.current && playerRef.current) {
       try {
@@ -396,10 +407,10 @@ export function PlayerBar() {
         className="hidden pointer-events-none w-0 h-0 overflow-hidden"
       />
 
-      {/* Floating Dynamic Island Player Dock */}
-      <div className="fixed bottom-3 md:bottom-5 left-1/2 -translate-x-1/2 w-[95%] md:w-[92%] max-w-4xl z-50 bg-aether-surface/90 backdrop-blur-2xl border border-aether-gold/25 shadow-island rounded-2xl px-3 md:px-5 py-2.5 md:py-3 select-none flex items-center justify-between transition-all duration-300">
+      {/* Floating Dynamic Island Luxury Player Dock */}
+      <div className="fixed bottom-3 md:bottom-5 left-1/2 -translate-x-1/2 w-[95%] md:w-[92%] max-w-4xl z-50 bg-zinc-950/85 backdrop-blur-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] rounded-2xl px-3 md:px-5 py-2.5 md:py-3 select-none flex items-center justify-between transition-all duration-300">
         {/* Left: Track Information */}
-        <div className="flex items-center gap-2.5 md:gap-3.5 flex-1 md:flex-initial md:w-1/4 min-w-0 pr-2">
+        <div className="flex items-center gap-2.5 md:gap-3.5 min-w-[220px] max-w-[280px] shrink-0 pr-2">
           {currentTrack ? (
             <>
               <div className="relative w-10 h-10 md:w-12 md:h-12 rounded-xl overflow-hidden shrink-0 bg-aether-elevated border border-aether-border/60 shadow-md">
@@ -409,8 +420,8 @@ export function PlayerBar() {
                   className="w-full h-full object-cover"
                 />
               </div>
-              <div className="flex flex-col min-w-0 pr-1">
-                <span className="text-white text-xs font-semibold tracking-wide truncate hover:text-aether-gold transition cursor-pointer">
+              <div className="flex flex-col min-w-0 pr-1 flex-1">
+                <span className="text-white text-xs font-semibold tracking-wide truncate hover:text-[#F3E5AB] transition cursor-pointer">
                   {currentTrack.title}
                 </span>
                 <span className="text-aether-subdued text-[10px] md:text-[11px] truncate mt-0.5">
@@ -438,85 +449,104 @@ export function PlayerBar() {
         </div>
 
         {/* Center: Controls & Continuous Scrubber */}
-        <div className="flex flex-col items-center gap-1 md:gap-1.5 flex-1 max-w-[280px] sm:max-w-xs md:max-w-md">
-          {hasError ? (
-            <div className="flex items-center gap-1.5 text-rose-400 text-[10px] font-mono animate-pulse">
-              <AlertCircle className="w-3.5 h-3.5" />
+        <div className="flex flex-col items-center gap-1 md:gap-1.5 flex-1 max-w-[280px] sm:max-w-xs md:max-w-md relative">
+          {/* Non-blocking Stream Error Badge */}
+          {hasError && (
+            <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-rose-950/90 border border-rose-500/40 text-rose-300 text-[10px] font-mono shadow-lg animate-pulse whitespace-nowrap z-20 pointer-events-none">
+              <AlertCircle className="w-3 h-3 text-rose-400 shrink-0" />
               <span>Stream interrupted, advancing...</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 md:gap-4">
-              <button
-                onClick={toggleShuffle}
-                className={`p-1 transition hidden sm:block ${
-                  isShuffle ? "text-aether-gold" : "text-aether-muted hover:text-white"
-                }`}
-                title="Shuffle"
-              >
-                <Shuffle className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={prevTrack}
-                disabled={!currentTrack}
-                className="text-aether-subdued hover:text-white disabled:opacity-30 transition p-1"
-                title="Previous Track"
-              >
-                <SkipBack className="w-4 h-4 fill-current" />
-              </button>
-              <button
-                onClick={handleTogglePlay}
-                disabled={!currentTrack}
-                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-tr from-aether-gold-muted via-aether-gold to-aether-gold-hover hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center text-black shadow-gold-glow disabled:opacity-30 shrink-0"
-                title={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? (
-                  <Pause className="w-4 h-4 fill-black text-black" />
-                ) : (
-                  <Play className="w-4 h-4 fill-black text-black ml-0.5" />
-                )}
-              </button>
-              <button
-                onClick={nextTrack}
-                disabled={!currentTrack}
-                className="text-aether-subdued hover:text-white disabled:opacity-30 transition p-1"
-                title="Next Track"
-              >
-                <SkipForward className="w-4 h-4 fill-current" />
-              </button>
-              <button
-                onClick={toggleRepeat}
-                className={`p-1 transition relative hidden sm:block ${
-                  repeatMode !== "off"
-                    ? "text-aether-gold"
-                    : "text-aether-muted hover:text-white"
-                }`}
-                title={`Repeat: ${repeatMode}`}
-              >
-                <Repeat className="w-3.5 h-3.5" />
-                {repeatMode === "one" && (
-                  <span className="absolute -top-1 -right-1 text-[8px] font-bold text-aether-gold">
-                    1
-                  </span>
-                )}
-              </button>
             </div>
           )}
 
-          {/* Scrubber Bar */}
-          <div className="flex items-center gap-2 w-full group">
-            <span className="text-[9px] md:text-[10px] text-aether-subdued font-mono w-7 md:w-8 text-right tabular-nums">
-              {formatTime(progress)}
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={duration || 100}
-              value={progress}
-              onChange={handleSeek}
+          {/* Playback Controls (Always visible, never hidden) */}
+          <div className="flex items-center gap-3 md:gap-4">
+            <button
+              onClick={toggleShuffle}
+              className={`p-1 transition hidden sm:block ${
+                isShuffle ? "text-aether-gold" : "text-aether-muted hover:text-white"
+              }`}
+              title="Shuffle"
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={prevTrack}
               disabled={!currentTrack}
-              className="w-full"
-            />
-            <span className="text-[9px] md:text-[10px] text-aether-subdued font-mono w-7 md:w-8 text-left tabular-nums">
+              className="text-aether-subdued hover:text-white disabled:opacity-30 transition p-1"
+              title="Previous Track"
+            >
+              <SkipBack className="w-4 h-4 fill-current" />
+            </button>
+            <button
+              onClick={handleTogglePlay}
+              disabled={!currentTrack}
+              className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-tr from-[#C5A059] via-[#D4AF37] to-[#F3E5AB] hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center text-black shadow-[0_0_20px_rgba(212,175,55,0.4)] disabled:opacity-30 shrink-0"
+              title={isPlaying ? "Pause" : "Play"}
+            >
+              {isPlaying ? (
+                <Pause className="w-4 h-4 fill-black text-black" />
+              ) : (
+                <Play className="w-4 h-4 fill-black text-black ml-0.5" />
+              )}
+            </button>
+            <button
+              onClick={nextTrack}
+              disabled={!currentTrack}
+              className="text-aether-subdued hover:text-white disabled:opacity-30 transition p-1"
+              title="Next Track"
+            >
+              <SkipForward className="w-4 h-4 fill-current" />
+            </button>
+            <button
+              onClick={toggleRepeat}
+              className={`p-1 transition relative hidden sm:block ${
+                repeatMode !== "off"
+                  ? "text-aether-gold"
+                  : "text-aether-muted hover:text-white"
+              }`}
+              title={`Repeat: ${repeatMode}`}
+            >
+              <Repeat className="w-3.5 h-3.5" />
+              {repeatMode === "one" && (
+                <span className="absolute -top-1 -right-1 text-[8px] font-bold text-aether-gold">
+                  1
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Scrubber Bar */}
+          <div className="flex items-center gap-2 w-full">
+            <span className="text-[9px] md:text-[10px] text-aether-subdued font-mono w-7 md:w-8 text-right tabular-nums shrink-0">
+              {formatTime(currentTime)}
+            </span>
+
+            {/* Custom Seek Track Container with Gold Progress Fill & Glowing Thumb Dot */}
+            <div className="relative flex items-center w-full h-1.5 bg-zinc-800/90 rounded-full cursor-pointer group">
+              {/* Filled gold gradient bar */}
+              <div
+                className="h-full bg-gradient-to-r from-[#C5A059] to-[#F3E5AB] rounded-full pointer-events-none transition-[width] duration-75"
+                style={{ width: `${progressPercent}%` }}
+              />
+              {/* Visible circular thumb dot */}
+              <div
+                className="w-3.5 h-3.5 rounded-full bg-[#F3E5AB] border-2 border-[#D4AF37] shadow-[0_0_10px_rgba(212,175,55,0.85)] -translate-x-1/2 -translate-y-1/2 top-1/2 absolute pointer-events-none transition-transform group-hover:scale-125"
+                style={{ left: `${progressPercent}%` }}
+              />
+              {/* Full-width transparent range input overlay */}
+              <input
+                type="range"
+                min={0}
+                max={duration || 100}
+                step={0.1}
+                value={currentTime}
+                onChange={handleSeek}
+                disabled={!currentTrack}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <span className="text-[9px] md:text-[10px] text-aether-subdued font-mono w-7 md:w-8 text-left tabular-nums shrink-0">
               {formatTime(duration)}
             </span>
           </div>
@@ -537,10 +567,11 @@ export function PlayerBar() {
           </button>
 
           {/* Volume slider (desktop only, phones have physical rockers) */}
-          <div className="hidden md:flex items-center gap-2 group w-24 lg:w-28">
+          <div className="hidden md:flex items-center gap-2.5 w-24 lg:w-28">
             <button
               onClick={handleToggleMute}
               className="text-aether-muted hover:text-white transition shrink-0"
+              title={isMuted || volume === 0 ? "Unmute" : "Mute"}
             >
               {isMuted || volume === 0 ? (
                 <VolumeX className="w-4 h-4" />
@@ -548,15 +579,30 @@ export function PlayerBar() {
                 <Volume2 className="w-4 h-4" />
               )}
             </button>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={isMuted ? 0 : volume}
-              onChange={handleVolumeChange}
-              className="w-full"
-            />
+
+            {/* Custom Volume Track Container with Gold Progress Fill & Glowing Thumb Dot */}
+            <div className="relative flex items-center w-full h-1.5 bg-zinc-800/90 rounded-full cursor-pointer group">
+              {/* Filled gold gradient bar */}
+              <div
+                className="h-full bg-gradient-to-r from-[#C5A059] to-[#F3E5AB] rounded-full pointer-events-none transition-[width] duration-75"
+                style={{ width: `${volumePercent}%` }}
+              />
+              {/* Visible circular thumb dot */}
+              <div
+                className="w-3.5 h-3.5 rounded-full bg-[#F3E5AB] border-2 border-[#D4AF37] shadow-[0_0_10px_rgba(212,175,55,0.85)] -translate-x-1/2 -translate-y-1/2 top-1/2 absolute pointer-events-none transition-transform group-hover:scale-125"
+                style={{ left: `${volumePercent}%` }}
+              />
+              {/* Full-width transparent range input overlay */}
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={isMuted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              />
+            </div>
           </div>
         </div>
       </div>

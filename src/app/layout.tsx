@@ -44,10 +44,10 @@ export default function RootLayout({
         {/* Main Application Area (Sidebar + Canvas) */}
         <div className="flex-1 flex overflow-hidden p-2 md:p-3 gap-3">
           <Sidebar />
-          <main className="flex-1 bg-gradient-to-b from-aether-dark via-aether-black to-black rounded-xl md:rounded-2xl border border-aether-border/40 overflow-y-auto relative flex flex-col shadow-2xl">
+          <main className="flex-1 bg-gradient-to-b from-aether-dark via-aether-black to-black rounded-xl md:rounded-2xl border border-aether-border/40 overflow-y-auto relative flex flex-col shadow-2xl pb-36">
             {children}
             {/* Bottom spacer for floating dynamic island */}
-            <div className="h-28 shrink-0" />
+            <div className="h-36 shrink-0" />
           </main>
         </div>
 
