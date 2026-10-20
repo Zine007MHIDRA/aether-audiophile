@@ -6,6 +6,7 @@ import { PlayerBar } from "@/components/PlayerBar";
 import { LyricsModal } from "@/components/LyricsModal";
 import { AuthModal } from "@/components/AuthModal";
 import { CreatePlaylistModal } from "@/components/CreatePlaylistModal";
+import { AuthInitializer } from "@/components/AuthInitializer";
 
 export const metadata: Metadata = {
   title: "Aether — Audiophile Music",
@@ -53,6 +54,9 @@ export default function RootLayout({
 
         {/* Floating Dynamic Island Luxury Player Bar */}
         <PlayerBar />
+
+        {/* Session Initializer */}
+        <AuthInitializer />
 
         {/* Modals & Overlays */}
         <LyricsModal />

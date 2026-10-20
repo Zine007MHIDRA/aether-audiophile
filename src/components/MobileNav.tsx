@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, Search, Bookmark, User, LogIn } from "lucide-react";
+import { Compass, Search, Bookmark, User, LogIn, LogOut } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { useAuthStore } from "@/store/auth-store";
 
@@ -66,20 +66,26 @@ export function MobileNav() {
         </Link>
 
         {user ? (
-          <button
-            onClick={signOut}
-            className="p-1.5 rounded-lg text-aether-gold hover:bg-aether-elevated transition"
-            title="Sign Out"
-          >
-            <User className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5 bg-aether-surface/80 border border-aether-gold/30 px-2 py-1 rounded-lg">
+            <span className="text-white text-[10px] font-semibold max-w-[75px] truncate">
+              {user.email?.split("@")[0]}
+            </span>
+            <button
+              onClick={signOut}
+              className="p-1 text-aether-muted hover:text-rose-400 rounded transition"
+              title="Sign Out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         ) : (
           <button
             onClick={openAuthModal}
-            className="p-1.5 rounded-lg text-aether-gold hover:bg-aether-elevated transition"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-aether-gold hover:bg-aether-elevated transition border border-aether-gold/30"
             title="Sign In"
           >
             <LogIn className="w-3.5 h-3.5" />
+            <span>Join</span>
           </button>
         )}
       </nav>
