@@ -15,11 +15,18 @@ export interface Playlist {
   created_at?: string;
 }
 
+export interface SyncStatus {
+  isSyncing: boolean;
+  resolved: number;
+  total: number;
+}
+
 interface PlaylistState {
   playlists: Playlist[];
   isLoading: boolean;
   isCreateModalOpen: boolean;
   initialTab: "create" | "import";
+  syncStatus: SyncStatus | null;
 
   openCreateModal: (tab?: "create" | "import") => void;
   openImportModal: () => void;
@@ -31,7 +38,13 @@ interface PlaylistState {
   addTrackToPlaylist: (playlistId: string, track: Track) => Promise<boolean>;
   syncVaultWithCloud: () => Promise<void>;
   persistVaultTrack: (track: Track, isLiked: boolean) => Promise<void>;
+  resolveTrackInPlaylists: (oldId: string, updatedTrack: Partial<Track>) => Promise<void>;
+  startBackgroundSync: () => void;
+  stopBackgroundSync: () => void;
 }
+
+let backgroundTimer: NodeJS.Timeout | null = null;
+const inFlightIds = new Set<string>();
 
 export const usePlaylistStore = create<PlaylistState>()(
   persist(
@@ -40,6 +53,7 @@ export const usePlaylistStore = create<PlaylistState>()(
       isLoading: false,
       isCreateModalOpen: false,
       initialTab: "create",
+      syncStatus: null,
 
       openCreateModal: (tab: "create" | "import" = "create") =>
         set({ isCreateModalOpen: true, initialTab: tab }),
@@ -150,8 +164,16 @@ export const usePlaylistStore = create<PlaylistState>()(
                 position: index,
               }));
 
-              if (rows.length > 0) {
-                await supabase.from("playlist_tracks").insert(rows);
+              // Chunk database inserts into batches of 200 rows per request
+              const chunkSize = 200;
+              for (let i = 0; i < rows.length; i += chunkSize) {
+                const chunk = rows.slice(i, i + chunkSize);
+                const { error: chunkErr } = await supabase
+                  .from("playlist_tracks")
+                  .insert(chunk);
+                if (chunkErr) {
+                  console.warn("Error inserting chunk into playlist_tracks:", chunkErr);
+                }
               }
 
               const newPlaylist: Playlist = {
@@ -171,6 +193,21 @@ export const usePlaylistStore = create<PlaylistState>()(
                 ],
                 isCreateModalOpen: false,
               }));
+
+              // Start background resolution if any tracks are pending
+              const pendingCount = tracks.filter((t) =>
+                t.id.startsWith("pending:")
+              ).length;
+              if (pendingCount > 0) {
+                set({
+                  syncStatus: {
+                    isSyncing: true,
+                    resolved: tracks.length - pendingCount,
+                    total: tracks.length,
+                  },
+                });
+                get().startBackgroundSync();
+              }
 
               return playlistId;
             }
@@ -195,6 +232,21 @@ export const usePlaylistStore = create<PlaylistState>()(
           playlists: [localPlaylist, ...state.playlists],
           isCreateModalOpen: false,
         }));
+
+        // Start background resolution for guest local playlist
+        const pendingCount = tracks.filter((t) =>
+          t.id.startsWith("pending:")
+        ).length;
+        if (pendingCount > 0) {
+          set({
+            syncStatus: {
+              isSyncing: true,
+              resolved: tracks.length - pendingCount,
+              total: tracks.length,
+            },
+          });
+          get().startBackgroundSync();
+        }
 
         return localId;
       },
@@ -306,6 +358,138 @@ export const usePlaylistStore = create<PlaylistState>()(
             .delete()
             .eq("user_id", user.id)
             .eq("track_id", track.id);
+        }
+      },
+
+      resolveTrackInPlaylists: async (oldId: string, updatedTrack: Partial<Track>) => {
+        set((state) => {
+          let anyUpdated = false;
+          const playlists = state.playlists.map((pl) => {
+            if (!pl.tracks) return pl;
+            let plChanged = false;
+            const updatedTracks = pl.tracks.map((t) => {
+              if (t.id === oldId) {
+                plChanged = true;
+                anyUpdated = true;
+                return { ...t, ...updatedTrack };
+              }
+              return t;
+            });
+            return plChanged ? { ...pl, tracks: updatedTracks } : pl;
+          });
+
+          // Check if there are still pending tracks across playlists to update syncStatus
+          let totalCount = 0;
+          let resolvedCount = 0;
+          let hasPending = false;
+
+          for (const pl of playlists) {
+            if (pl.tracks && pl.tracks.some((t) => t.id.startsWith("pending:"))) {
+              hasPending = true;
+              totalCount += pl.tracks.length;
+              resolvedCount += pl.tracks.filter(
+                (t) => !t.id.startsWith("pending:")
+              ).length;
+            }
+          }
+
+          const syncStatus = hasPending
+            ? { isSyncing: true, resolved: resolvedCount, total: totalCount }
+            : null;
+
+          return { playlists, syncStatus };
+        });
+
+        if (isSupabaseConfigured() && useAuthStore.getState().user) {
+          try {
+            const supabase = createClient();
+            await supabase
+              .from("playlist_tracks")
+              .update({
+                track_id: updatedTrack.id || oldId,
+                thumbnail: updatedTrack.thumbnail,
+                duration: updatedTrack.duration,
+              })
+              .eq("track_id", oldId);
+          } catch (e) {
+            console.warn("Failed to update track in Supabase:", e);
+          }
+        }
+      },
+
+      startBackgroundSync: () => {
+        if (backgroundTimer) return;
+
+        const tick = async () => {
+          const playlists = get().playlists;
+          const pendingList: Track[] = [];
+
+          for (const pl of playlists) {
+            if (pl.tracks) {
+              for (const t of pl.tracks) {
+                if (t.id.startsWith("pending:") && !inFlightIds.has(t.id)) {
+                  pendingList.push(t);
+                  if (pendingList.length >= 2) break;
+                }
+              }
+            }
+            if (pendingList.length >= 2) break;
+          }
+
+          if (pendingList.length === 0) {
+            const hasAnyPending = playlists.some((pl) =>
+              pl.tracks?.some((t) => t.id.startsWith("pending:"))
+            );
+            if (!hasAnyPending) {
+              set({ syncStatus: null });
+              if (backgroundTimer) {
+                clearInterval(backgroundTimer);
+                backgroundTimer = null;
+              }
+              inFlightIds.clear();
+            }
+            return;
+          }
+
+          // Process 2 tracks gently every 1.5s
+          await Promise.all(
+            pendingList.map(async (track) => {
+              inFlightIds.add(track.id);
+              try {
+                const query = `${track.title} ${track.artist}`.trim();
+                const res = await fetch(
+                  `/api/search?q=${encodeURIComponent(query)}`
+                );
+                if (!res.ok) return;
+                const data = await res.json();
+                const top = data.tracks?.[0];
+                if (top) {
+                  const upd: Partial<Track> = {
+                    id: top.id,
+                    thumbnail: top.thumbnail,
+                    duration: top.duration || track.duration,
+                    durationFormatted:
+                      top.durationFormatted || track.durationFormatted,
+                  };
+                  await get().resolveTrackInPlaylists(track.id, upd);
+                  usePlayerStore.getState().resolveTrack(track.id, upd);
+                }
+              } catch (err) {
+                console.warn("Background track resolution error:", err);
+              } finally {
+                inFlightIds.delete(track.id);
+              }
+            })
+          );
+        };
+
+        backgroundTimer = setInterval(tick, 1500);
+      },
+
+      stopBackgroundSync: () => {
+        if (backgroundTimer) {
+          clearInterval(backgroundTimer);
+          backgroundTimer = null;
         }
       },
     }),

@@ -33,6 +33,7 @@ interface PlayerState {
   toggleLike: (track: Track) => void;
   toggleLyrics: () => void;
   addToQueue: (track: Track) => void;
+  resolveTrack: (oldId: string, updatedTrack: Partial<Track>) => void;
 }
 
 export const usePlayerStore = create<PlayerState>()(
@@ -170,6 +171,31 @@ export const usePlayerStore = create<PlayerState>()(
         set((state) => ({
           queue: [...state.queue, track],
         })),
+
+      resolveTrack: (oldId, updatedTrack) => {
+        set((state) => {
+          const currentTrack =
+            state.currentTrack?.id === oldId
+              ? { ...state.currentTrack, ...updatedTrack }
+              : state.currentTrack;
+
+          const queue = state.queue.map((t) =>
+            t.id === oldId ? { ...t, ...updatedTrack } : t
+          );
+
+          const likedTracks = state.likedTracks.map((t) =>
+            t.id === oldId ? { ...t, ...updatedTrack } : t
+          );
+          const likedTrackIds = likedTracks.map((t) => t.id);
+
+          return {
+            currentTrack,
+            queue,
+            likedTracks,
+            likedTrackIds,
+          };
+        });
+      },
     }),
     {
       name: "aether-player-storage",

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ListMusic, Play, Trash2, Clock, Sparkles, Compass } from "lucide-react";
 import Link from "next/link";
@@ -10,6 +10,8 @@ import { TrackRow } from "@/components/TrackRow";
 import { usePlayerStore } from "@/store/player-store";
 import { usePlaylistStore, Playlist } from "@/store/playlist-store";
 
+const CHUNK_SIZE = 100;
+
 export default function PlaylistPage() {
   const params = useParams();
   const id = params?.id as string;
@@ -17,9 +19,26 @@ export default function PlaylistPage() {
 
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [visibleCount, setVisibleCount] = useState(CHUNK_SIZE);
   const [loading, setLoading] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
   const playTrack = usePlayerStore((state) => state.playTrack);
   const deletePlaylist = usePlaylistStore((state) => state.deletePlaylist);
+  const storePlaylists = usePlaylistStore((state) => state.playlists);
+
+  // Sync state reactively when background resolver resolves tracks
+  useEffect(() => {
+    const local = storePlaylists.find((p) => p.id === id);
+    if (local && local.tracks && local.tracks.length > 0) {
+      setPlaylist(local);
+      setTracks(local.tracks);
+    }
+  }, [storePlaylists, id]);
+
+  useEffect(() => {
+    setVisibleCount(CHUNK_SIZE);
+  }, [id]);
 
   useEffect(() => {
     if (!id) {
@@ -97,11 +116,29 @@ export default function PlaylistPage() {
     loadPlaylistData();
   }, [id]);
 
+  // Progressive rendering: IntersectionObserver infinite scroll in chunks of 100
+  useEffect(() => {
+    if (!loadMoreRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + CHUNK_SIZE, tracks.length));
+        }
+      },
+      { rootMargin: "400px" }
+    );
+
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [tracks.length, visibleCount]);
+
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this playlist?")) return;
     await deletePlaylist(id);
     router.push("/");
   };
+
+  const visibleTracks = tracks.slice(0, visibleCount);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -194,15 +231,34 @@ export default function PlaylistPage() {
             </div>
 
             <div className="flex flex-col">
-              {tracks.map((track, idx) => (
+              {visibleTracks.map((track, idx) => (
                 <TrackRow
-                  key={track.id}
+                  key={`${track.id}-${idx}`}
                   track={track}
                   index={idx}
                   tracksContext={tracks}
                 />
               ))}
             </div>
+
+            {/* Progressive Loading Sentinel and Manual Action Button */}
+            {visibleCount < tracks.length && (
+              <div className="flex flex-col items-center justify-center py-8 gap-3">
+                <div ref={loadMoreRef} className="h-4 w-full pointer-events-none" />
+                <button
+                  onClick={() =>
+                    setVisibleCount((prev) =>
+                      Math.min(prev + CHUNK_SIZE, tracks.length)
+                    )
+                  }
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-aether-elevated hover:bg-aether-highlight border border-aether-gold/30 hover:border-aether-gold text-aether-gold text-xs font-mono tracking-wider transition shadow-sm hover:scale-105 active:scale-95"
+                >
+                  <span>
+                    Showing {visibleCount} of {tracks.length} compositions • Load 100 more
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

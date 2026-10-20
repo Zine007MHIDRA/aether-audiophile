@@ -4,12 +4,10 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   Plus,
-  Music,
   Sparkles,
   Link2,
   FileText,
   UploadCloud,
-  CheckCircle2,
   AlertCircle,
   Loader2,
   Disc,
@@ -18,6 +16,15 @@ import {
 import { usePlaylistStore } from "@/store/playlist-store";
 import { useRouter } from "next/navigation";
 import { Track } from "@/types/music";
+
+interface ParsedItem {
+  title: string;
+  artist: string;
+  album?: string;
+  duration?: number;
+  durationFormatted?: string;
+  thumbnail?: string;
+}
 
 export function CreatePlaylistModal() {
   const {
@@ -46,7 +53,7 @@ export function CreatePlaylistModal() {
   // Import File states
   const [file, setFile] = useState<File | null>(null);
   const [filePlaylistName, setFilePlaylistName] = useState("");
-  const [parsedFileQueries, setParsedFileQueries] = useState<string[]>([]);
+  const [parsedFileItems, setParsedFileItems] = useState<ParsedItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Import Text states
@@ -69,7 +76,7 @@ export function CreatePlaylistModal() {
       setIsProcessing(false);
       setUrlInput("");
       setFile(null);
-      setParsedFileQueries([]);
+      setParsedFileItems([]);
       setTextInput("");
       setTextPlaylistName("");
       setFilePlaylistName("");
@@ -80,9 +87,9 @@ export function CreatePlaylistModal() {
   if (!isCreateModalOpen) return null;
 
   // ---------------------------------------------------------------------------
-  // Helper: CSV Parser
+  // Helper: Exportify CSV Parser
   // ---------------------------------------------------------------------------
-  const parseCSV = (csvText: string): string[] => {
+  const parseCSV = (csvText: string): ParsedItem[] => {
     const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (lines.length < 2) return [];
 
@@ -121,52 +128,133 @@ export function CreatePlaylistModal() {
         h === "artist" ||
         h === "artists"
     );
+    let albumIdx = headers.findIndex(
+      (h) => h === "album name" || h === "album"
+    );
+    let durationIdx = headers.findIndex(
+      (h) =>
+        h.includes("duration (ms)") ||
+        h.includes("duration ms") ||
+        h === "duration"
+    );
 
     if (trackIdx === -1) trackIdx = 0;
     if (artistIdx === -1) artistIdx = 1;
 
-    const queries: string[] = [];
+    const items: ParsedItem[] = [];
     for (let i = 1; i < lines.length; i++) {
       const cols = parseLine(lines[i]);
       const title = cols[trackIdx];
-      const artist = cols[artistIdx] || "";
+      const artist = cols[artistIdx] || "Unknown Artist";
+      const album = albumIdx !== -1 ? cols[albumIdx] : undefined;
+
+      let duration = 210;
+      let durationFormatted = "3:30";
+      if (durationIdx !== -1 && cols[durationIdx]) {
+        const parsedNum = Number(cols[durationIdx]);
+        if (!isNaN(parsedNum) && parsedNum > 0) {
+          duration =
+            parsedNum > 1000
+              ? Math.round(parsedNum / 1000)
+              : Math.round(parsedNum);
+          const mins = Math.floor(duration / 60);
+          const secs = duration % 60;
+          durationFormatted = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+        }
+      }
+
       if (title && title.length > 0) {
-        queries.push(`${title} ${artist}`.trim());
+        items.push({
+          title,
+          artist,
+          album,
+          duration,
+          durationFormatted,
+          thumbnail: "/branding/aether-logo.jpg",
+        });
       }
     }
-    return queries;
+    return items;
   };
 
   // ---------------------------------------------------------------------------
   // Helper: M3U / TXT Parser
   // ---------------------------------------------------------------------------
-  const parseM3UOrTxt = (text: string): string[] => {
+  const parseM3UOrTxt = (text: string): ParsedItem[] => {
     const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-    const queries: string[] = [];
+    const items: ParsedItem[] = [];
 
     for (const rawLine of lines) {
       const line = rawLine.trim();
+      let trackStr = "";
       if (line.startsWith("#EXTINF:")) {
         const commaIdx = line.indexOf(",");
         if (commaIdx !== -1) {
-          const item = line.slice(commaIdx + 1).trim();
-          if (item) queries.push(item);
+          trackStr = line.slice(commaIdx + 1).trim();
         }
       } else if (!line.startsWith("#")) {
-        // Strip file paths and extensions
-        const cleaned = line
+        trackStr = line
           .replace(/^.*[\\/]/, "")
           .replace(/\.(mp3|flac|m4a|wav|aac|ogg|opus)$/i, "")
           .replace(/^\d+[\.\-\s]+/, "")
           .trim();
-        if (cleaned) queries.push(cleaned);
+      }
+
+      if (trackStr) {
+        let artist = "Unknown Artist";
+        let title = trackStr;
+        if (trackStr.includes(" - ")) {
+          const parts = trackStr.split(" - ");
+          artist = parts[0].trim();
+          title = parts.slice(1).join(" - ").trim();
+        }
+        items.push({
+          title,
+          artist,
+          duration: 210,
+          durationFormatted: "3:30",
+          thumbnail: "/branding/aether-logo.jpg",
+        });
       }
     }
-    return queries;
+    return items;
   };
 
   // ---------------------------------------------------------------------------
-  // Batch Track Matcher & Ingestion
+  // Instant Lazy Import for 25+ Compositions
+  // ---------------------------------------------------------------------------
+  const instantLazyImport = async (
+    playlistName: string,
+    items: ParsedItem[],
+    coverUrl?: string
+  ) => {
+    setIsProcessing(true);
+    setError(null);
+
+    const tracks: Track[] = items.map((item, idx) => ({
+      id: `pending:${idx}:${encodeURIComponent(`${item.title} ${item.artist}`.trim())}`,
+      title: item.title,
+      artist: item.artist || "Unknown Artist",
+      album: item.album || "Single",
+      duration: item.duration || 210,
+      durationFormatted: item.durationFormatted || "3:30",
+      thumbnail: item.thumbnail || coverUrl || "/branding/aether-logo.jpg",
+    }));
+
+    try {
+      const finalName = playlistName.trim() || "Imported Collection";
+      const newId = await importPlaylist(finalName, tracks, coverUrl);
+      setIsProcessing(false);
+      closeCreateModal();
+      router.push(`/playlist/${newId}`);
+    } catch (e: any) {
+      setIsProcessing(false);
+      setError(`Failed to save playlist: ${e?.message || "Unknown error"}`);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Batch Track Matcher for Small Lists (<= 25 items)
   // ---------------------------------------------------------------------------
   const matchAndImportBatch = async (
     playlistName: string,
@@ -198,8 +286,7 @@ export function CreatePlaylistModal() {
             const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
             if (!res.ok) return null;
             const data = await res.json();
-            const first = data.tracks?.[0];
-            return first || null;
+            return data.tracks?.[0] || null;
           } catch {
             return null;
           }
@@ -245,7 +332,7 @@ export function CreatePlaylistModal() {
   };
 
   // ---------------------------------------------------------------------------
-  // Handlers
+  // Form Submit Handlers
   // ---------------------------------------------------------------------------
   const handleBlankSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -287,15 +374,31 @@ export function CreatePlaylistModal() {
       }
 
       if (!data.needsMatching && Array.isArray(data.tracks)) {
-        // Direct YouTube track import!
+        // Direct YouTube tracks (up to 2,000 paginated tracks)
         setIsProcessing(true);
         const newId = await importPlaylist(data.name, data.tracks, data.coverUrl);
         setIsProcessing(false);
         closeCreateModal();
         router.push(`/playlist/${newId}`);
-      } else if (data.needsMatching && Array.isArray(data.queries)) {
-        // Spotify / Deezer / Apple Music batch matching
-        await matchAndImportBatch(data.name, data.queries, data.coverUrl);
+      } else if (data.needsMatching) {
+        // Spotify / Deezer / Apple Music
+        const items: ParsedItem[] = Array.isArray(data.items)
+          ? data.items
+          : (data.queries || []).map((q: string) => ({
+              title: q,
+              artist: "",
+              duration: 210,
+              durationFormatted: "3:30",
+              thumbnail: data.coverUrl || "/branding/aether-logo.jpg",
+            }));
+
+        if (items.length > 25) {
+          // Instant lazy-resolved import for 25+ tracks (e.g. 700 to 2,000 tracks)
+          await instantLazyImport(data.name, items, data.coverUrl);
+        } else {
+          // Fast batch match for small lists
+          await matchAndImportBatch(data.name, data.queries, data.coverUrl);
+        }
       } else {
         setError("Invalid response format received from import service.");
       }
@@ -320,45 +423,54 @@ export function CreatePlaylistModal() {
       const content = evt.target?.result as string;
       if (!content) return;
 
-      let queries: string[] = [];
+      let items: ParsedItem[] = [];
       if (selected.name.endsWith(".csv")) {
-        queries = parseCSV(content);
+        items = parseCSV(content);
       } else {
-        queries = parseM3UOrTxt(content);
+        items = parseM3UOrTxt(content);
       }
-      setParsedFileQueries(queries);
+      setParsedFileItems(items);
     };
     reader.readAsText(selected);
   };
 
   const handleFileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (parsedFileQueries.length === 0) {
+    if (parsedFileItems.length === 0) {
       setError("Please select a valid CSV, M3U, or TXT file with tracks.");
       return;
     }
-    await matchAndImportBatch(
-      filePlaylistName || file?.name || "Imported Collection",
-      parsedFileQueries
-    );
+
+    const playlistName =
+      filePlaylistName || file?.name.replace(/\.[^/.]+$/, "") || "Exported Collection";
+
+    if (parsedFileItems.length > 25) {
+      // Instant lazy import for large lists (700 to 2,000+ tracks)
+      await instantLazyImport(playlistName, parsedFileItems);
+    } else {
+      const queries = parsedFileItems.map((i) => `${i.title} ${i.artist}`.trim());
+      await matchAndImportBatch(playlistName, queries);
+    }
   };
 
   const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const lines = textInput
-      .split(/\r?\n/)
-      .map((l) => l.trim().replace(/^\d+[\.\-\s]+/, "").trim())
-      .filter((l) => l.length > 0);
+    const items = parseM3UOrTxt(textInput);
 
-    if (lines.length === 0) {
-      setError("Please paste at least one track line.");
+    if (items.length === 0) {
+      setError("Please paste at least one composition line.");
       return;
     }
 
-    await matchAndImportBatch(
-      textPlaylistName.trim() || "Imported Tracklist",
-      lines
-    );
+    const playlistName = textPlaylistName.trim() || "Imported Tracklist";
+
+    if (items.length > 25) {
+      // Instant lazy import for 25+ compositions
+      await instantLazyImport(playlistName, items);
+    } else {
+      const queries = items.map((i) => `${i.title} ${i.artist}`.trim());
+      await matchAndImportBatch(playlistName, queries);
+    }
   };
 
   return (
@@ -383,7 +495,7 @@ export function CreatePlaylistModal() {
           <p className="text-aether-subdued text-xs">
             {mainTab === "create"
               ? "Assemble a private bespoke collection in your studio."
-              : "Import tracklists from Spotify, YouTube, Apple Music, Deezer, or CSV files."}
+              : "Import 700 to 2,000+ tracklists instantly from Spotify, YouTube, Apple Music, Deezer, or CSV files."}
           </p>
         </div>
 
@@ -442,10 +554,12 @@ export function CreatePlaylistModal() {
 
             <div className="flex flex-col gap-1.5 max-w-sm">
               <h3 className="text-base font-bold text-white tracking-tight">
-                Matching Compositions
+                {progress ? "Matching Compositions" : "Assembling Playlist"}
               </h3>
               <p className="text-aether-subdued text-xs">
-                Searching Aether catalog with high-fidelity 24-bit audio matching...
+                {progress
+                  ? "Searching Aether catalog with high-fidelity 24-bit audio matching..."
+                  : "Creating instant collection and queueing background audio sync..."}
               </p>
             </div>
 
@@ -595,7 +709,7 @@ export function CreatePlaylistModal() {
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
                     <span>Supported Platforms</span>
-                    <span className="text-aether-gold">Direct & Batch</span>
+                    <span className="text-aether-gold">Up to 2,000 Tracks</span>
                   </div>
                   {/* Platform Pills */}
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -677,16 +791,16 @@ export function CreatePlaylistModal() {
                       {file ? file.name : "Click or drop Exportify CSV / .M3U file"}
                     </span>
                     <span className="text-aether-muted text-[10px]">
-                      Supports Spotify Exportify CSV, .m3u, .m3u8, or plain text
+                      Supports Exportify CSV (Track Name, Artist, Album, Duration), .m3u, .txt
                     </span>
                   </div>
                 </div>
 
-                {parsedFileQueries.length > 0 && (
+                {parsedFileItems.length > 0 && (
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between text-xs px-1">
                       <span className="text-aether-gold font-mono text-[11px]">
-                        ✓ {parsedFileQueries.length} compositions detected
+                        ✓ {parsedFileItems.length} compositions detected (Instant 1-Click Import)
                       </span>
                     </div>
 
@@ -708,7 +822,9 @@ export function CreatePlaylistModal() {
                       className="flex items-center justify-center gap-2 w-full mt-1 bg-gradient-to-r from-aether-gold-hover via-aether-gold to-aether-gold-muted text-black font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-gold-glow hover:scale-[1.02] active:scale-[0.98] transition-all"
                     >
                       <ArrowRight className="w-4 h-4 text-black" />
-                      <span>Import {parsedFileQueries.length} Compositions</span>
+                      <span>
+                        Import {parsedFileItems.length} Compositions Instantly
+                      </span>
                     </button>
                   </div>
                 )}
@@ -755,7 +871,7 @@ export function CreatePlaylistModal() {
                   className="flex items-center justify-center gap-2 w-full mt-1 bg-gradient-to-r from-aether-gold-hover via-aether-gold to-aether-gold-muted text-black font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-gold-glow hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
                 >
                   <ArrowRight className="w-4 h-4 text-black" />
-                  <span>Parse & Import Tracklist</span>
+                  <span>Parse & Import Compositions Instantly</span>
                 </button>
               </form>
             )}

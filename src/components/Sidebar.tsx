@@ -13,6 +13,7 @@ import {
   LogOut,
   LogIn,
   UploadCloud,
+  Disc,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { useAuthStore } from "@/store/auth-store";
@@ -27,6 +28,8 @@ export function Sidebar() {
     openCreateModal,
     openImportModal,
     fetchPlaylists,
+    syncStatus,
+    startBackgroundSync,
   } = usePlaylistStore();
 
   useEffect(() => {
@@ -38,6 +41,16 @@ export function Sidebar() {
       fetchPlaylists();
     }
   }, [user, fetchPlaylists]);
+
+  // Automatically start background sync if any playlists contain pending tracks
+  useEffect(() => {
+    const hasPending = playlists.some((pl) =>
+      pl.tracks?.some((t) => t.id.startsWith("pending:"))
+    );
+    if (hasPending && !syncStatus) {
+      startBackgroundSync();
+    }
+  }, [playlists, syncStatus, startBackgroundSync]);
 
   return (
     <aside className="hidden md:flex w-64 bg-aether-dark/95 border border-aether-border/40 rounded-2xl flex-col p-4 select-none justify-between shadow-2xl backdrop-blur-xl shrink-0">
@@ -131,6 +144,16 @@ export function Sidebar() {
               </button>
             </div>
           </div>
+
+          {/* Background Audio Sync Status Pill */}
+          {syncStatus && syncStatus.isSyncing && (
+            <div className="mx-1 px-2.5 py-1.5 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/30 flex items-center gap-2 text-[10px] font-mono text-[#F3E5AB] animate-pulse">
+              <Disc className="w-3 h-3 animate-spin text-[#D4AF37] shrink-0" />
+              <span className="truncate">
+                Syncing playlist audio: {syncStatus.resolved} / {syncStatus.total}
+              </span>
+            </div>
+          )}
 
           <div className="flex flex-col gap-1 overflow-y-auto max-h-48 pr-1">
             {playlists.length === 0 ? (

@@ -15,6 +15,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
+import { usePlaylistStore } from "@/store/playlist-store";
 import type { YTPlayerInstance } from "@/types/youtube-iframe";
 
 function formatTime(seconds: number): string {
@@ -29,7 +30,9 @@ export function PlayerBar() {
   const isPlayerReadyRef = useRef<boolean>(false);
   const activeTrackIdRef = useRef<string | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const preResolvingSetRef = useRef<Set<string>>(new Set());
   const [hasError, setHasError] = useState(false);
+  const [isResolvingAudio, setIsResolvingAudio] = useState(false);
 
   const {
     currentTrack,
@@ -100,8 +103,8 @@ export function PlayerBar() {
                 event.target.setVolume(store.volume * 100);
               }
 
-              // If a track was selected prior to onReady, load and play it
-              if (store.currentTrack) {
+              // If a track was selected prior to onReady, load and play it (if not pending)
+              if (store.currentTrack && !store.currentTrack.id.startsWith("pending:")) {
                 activeTrackIdRef.current = store.currentTrack.id;
                 event.target.loadVideoById(store.currentTrack.id);
                 if (store.isPlaying) {
@@ -133,6 +136,48 @@ export function PlayerBar() {
                     const time = playerRef.current.getCurrentTime();
                     if (typeof time === "number" && !isNaN(time)) {
                       setProgress(time);
+
+                      // Pre-resolve next pending track in queue 10 seconds before track ends
+                      const curDur =
+                        playerRef.current.getDuration?.() ||
+                        usePlayerStore.getState().duration;
+                      if (curDur > 0 && curDur - time <= 10) {
+                        const { queue, queueIndex } = usePlayerStore.getState();
+                        const next = queue[queueIndex + 1];
+                        if (
+                          next &&
+                          next.id.startsWith("pending:") &&
+                          !preResolvingSetRef.current.has(next.id)
+                        ) {
+                          preResolvingSetRef.current.add(next.id);
+                          const nextPendingId = next.id;
+                          const query = `${next.title} ${next.artist}`.trim();
+                          fetch(`/api/search?q=${encodeURIComponent(query)}`)
+                            .then((r) => r.json())
+                            .then((data) => {
+                              const top = data.tracks?.[0];
+                              if (top) {
+                                const upd = {
+                                  id: top.id,
+                                  thumbnail: top.thumbnail,
+                                  duration: top.duration || next.duration,
+                                  durationFormatted:
+                                    top.durationFormatted ||
+                                    next.durationFormatted,
+                                };
+                                usePlayerStore
+                                  .getState()
+                                  .resolveTrack(nextPendingId, upd);
+                                usePlaylistStore
+                                  .getState()
+                                  .resolveTrackInPlaylists(nextPendingId, upd);
+                              }
+                            })
+                            .catch((e) =>
+                              console.warn("Pre-resolve error:", e)
+                            );
+                        }
+                      }
                     }
                     const curState = playerRef.current.getPlayerState?.();
                     if (curState === playerState.PLAYING && !usePlayerStore.getState().isPlaying) {
@@ -229,7 +274,7 @@ export function PlayerBar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 2. Track changes: load and start playback
+  // 2. Track changes: load and start playback (or on-demand resolve if pending)
   useEffect(() => {
     if (!currentTrack) {
       activeTrackIdRef.current = null;
@@ -241,12 +286,72 @@ export function PlayerBar() {
       return;
     }
 
-    activeTrackIdRef.current = currentTrack.id;
     setHasError(false);
     setProgress(0);
     if (currentTrack.duration) {
       setDuration(currentTrack.duration);
     }
+
+    // On-demand track resolution for lazy-imported pending tracks
+    if (currentTrack.id.startsWith("pending:")) {
+      const pendingId = currentTrack.id;
+      setIsResolvingAudio(true);
+      const query = `${currentTrack.title} ${currentTrack.artist}`.trim();
+
+      fetch(`/api/search?q=${encodeURIComponent(query)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          setIsResolvingAudio(false);
+          const top = data.tracks?.[0];
+          if (top) {
+            const updated = {
+              id: top.id,
+              thumbnail: top.thumbnail,
+              duration: top.duration || currentTrack.duration,
+              durationFormatted:
+                top.durationFormatted || currentTrack.durationFormatted,
+            };
+
+            // Update stores immediately
+            usePlayerStore.getState().resolveTrack(pendingId, updated);
+            usePlaylistStore
+              .getState()
+              .resolveTrackInPlaylists(pendingId, updated);
+
+            activeTrackIdRef.current = top.id;
+
+            if (isPlayerReadyRef.current && playerRef.current) {
+              playerRef.current.loadVideoById(top.id);
+              if (usePlayerStore.getState().isPlaying) {
+                playerRef.current.playVideo();
+              }
+            }
+          } else {
+            console.warn(
+              "Could not resolve audio stream for pending track:",
+              query
+            );
+            setHasError(true);
+            setTimeout(() => {
+              setHasError(false);
+              usePlayerStore.getState().nextTrack();
+            }, 2000);
+          }
+        })
+        .catch((err) => {
+          setIsResolvingAudio(false);
+          console.warn("Error resolving pending track:", err);
+          setHasError(true);
+          setTimeout(() => {
+            setHasError(false);
+            usePlayerStore.getState().nextTrack();
+          }, 2000);
+        });
+
+      return;
+    }
+
+    activeTrackIdRef.current = currentTrack.id;
 
     if (isPlayerReadyRef.current && playerRef.current) {
       try {
@@ -450,6 +555,14 @@ export function PlayerBar() {
 
         {/* Center: Controls & Continuous Scrubber */}
         <div className="flex flex-col items-center gap-1 md:gap-1.5 flex-1 max-w-[280px] sm:max-w-xs md:max-w-md relative">
+          {/* Non-blocking Audio Resolving Badge */}
+          {isResolvingAudio && (
+            <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-aether-gold/20 border border-aether-gold/40 text-aether-gold text-[10px] font-mono shadow-lg animate-pulse whitespace-nowrap z-20 pointer-events-none">
+              <span className="w-1.5 h-1.5 rounded-full bg-aether-gold animate-ping" />
+              <span>Resolving Hi-Fi audio stream...</span>
+            </div>
+          )}
+
           {/* Non-blocking Stream Error Badge */}
           {hasError && (
             <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-rose-950/90 border border-rose-500/40 text-rose-300 text-[10px] font-mono shadow-lg animate-pulse whitespace-nowrap z-20 pointer-events-none">

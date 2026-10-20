@@ -17,14 +17,13 @@ export async function POST(req: NextRequest) {
     }
 
     // -------------------------------------------------------------------------
-    // Case A: YouTube / YouTube Music URL
+    // Case A: YouTube / YouTube Music URL (with full continuation pagination)
     // -------------------------------------------------------------------------
     let ytListId: string | null = null;
     try {
       const parsedUrl = new URL(url);
       ytListId = parsedUrl.searchParams.get("list");
     } catch {
-      // not a standard URL, try regex
       const m = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
       if (m) ytListId = m[1];
     }
@@ -75,7 +74,31 @@ export async function POST(req: NextRequest) {
           pl.header?.thumbnails?.[0]?.url ||
           undefined;
 
-        const rawVideos = (pl.videos || []) as any[];
+        // Paginate across all continuation pages up to 2,000 tracks
+        let rawVideos = [...(pl.videos || [])] as any[];
+        let currentContinuation = pl;
+        const maxLimit = 2000;
+
+        while (
+          currentContinuation?.has_continuation &&
+          rawVideos.length < maxLimit
+        ) {
+          try {
+            currentContinuation = await currentContinuation.getContinuation();
+            if (
+              currentContinuation?.videos &&
+              currentContinuation.videos.length > 0
+            ) {
+              rawVideos = rawVideos.concat(currentContinuation.videos);
+            } else {
+              break;
+            }
+          } catch (contErr) {
+            console.warn("YouTube continuation pagination warning:", contErr);
+            break;
+          }
+        }
+
         const tracks: Track[] = [];
 
         for (const v of rawVideos) {
@@ -201,8 +224,25 @@ export async function POST(req: NextRequest) {
           entity.coverArt?.sources?.[0]?.url || entity.images?.[0]?.url;
         const trackList = entity.trackList || [];
 
-        const queries = trackList
-          .map((t: any) => `${t.title} ${t.subtitle || ""}`.trim())
+        const items = trackList.map((t: any) => {
+          const title = t.title || "Unknown Track";
+          const artist = t.subtitle || "Unknown Artist";
+          const durationMs = t.duration || 0;
+          const duration = Math.round(durationMs / 1000);
+          const mins = Math.floor(duration / 60);
+          const secs = duration % 60;
+          const durationFormatted = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+          return {
+            title,
+            artist,
+            duration,
+            durationFormatted,
+            thumbnail: coverUrl || "/branding/aether-logo.jpg",
+          };
+        });
+
+        const queries = items
+          .map((t: any) => `${t.title} ${t.artist}`.trim())
           .filter(Boolean);
 
         if (queries.length === 0) {
@@ -215,6 +255,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           name,
           coverUrl,
+          items,
           queries,
           needsMatching: true,
         });
@@ -261,8 +302,26 @@ export async function POST(req: NextRequest) {
           json.picture_medium || json.picture_xl || json.picture;
 
         const tracksData = json.tracks?.data || [];
-        const queries = tracksData
-          .map((t: any) => `${t.title} ${t.artist?.name || ""}`.trim())
+        const items = tracksData.map((t: any) => {
+          const title = t.title || "Unknown Track";
+          const artist = t.artist?.name || "Unknown Artist";
+          const duration = t.duration || 0;
+          const mins = Math.floor(duration / 60);
+          const secs = duration % 60;
+          const durationFormatted = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+          return {
+            title,
+            artist,
+            album: t.album?.title,
+            duration,
+            durationFormatted,
+            thumbnail:
+              t.album?.cover_medium || coverUrl || "/branding/aether-logo.jpg",
+          };
+        });
+
+        const queries = items
+          .map((t: any) => `${t.title} ${t.artist}`.trim())
           .filter(Boolean);
 
         if (queries.length === 0) {
@@ -275,6 +334,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           name,
           coverUrl,
+          items,
           queries,
           needsMatching: true,
         });
@@ -325,7 +385,7 @@ export async function POST(req: NextRequest) {
               ? artworkUrl.replace("{w}x{h}bb.{f}", "600x600bb.jpg")
               : undefined;
 
-            const queries: string[] = [];
+            const items: any[] = [];
             for (const section of sections) {
               if (
                 section.itemKind === "trackLockup" &&
@@ -333,18 +393,26 @@ export async function POST(req: NextRequest) {
               ) {
                 for (const item of section.items) {
                   const title = item.title;
-                  const artist = item.artistName || "";
+                  const artist = item.artistName || "Unknown Artist";
                   if (title) {
-                    queries.push(`${title} ${artist}`.trim());
+                    items.push({
+                      title,
+                      artist,
+                      duration: 0,
+                      durationFormatted: "3:30",
+                      thumbnail: coverUrl || "/branding/aether-logo.jpg",
+                    });
                   }
                 }
               }
             }
 
-            if (queries.length > 0) {
+            if (items.length > 0) {
+              const queries = items.map((t) => `${t.title} ${t.artist}`.trim());
               return NextResponse.json({
                 name,
                 coverUrl,
+                items,
                 queries,
                 needsMatching: true,
               });
@@ -366,8 +434,16 @@ export async function POST(req: NextRequest) {
             .filter(Boolean);
 
           if (queries.length > 0) {
+            const items = queries.map((q: string) => ({
+              title: q,
+              artist: "",
+              duration: 0,
+              durationFormatted: "3:30",
+              thumbnail: "/branding/aether-logo.jpg",
+            }));
             return NextResponse.json({
               name,
+              items,
               queries,
               needsMatching: true,
             });
