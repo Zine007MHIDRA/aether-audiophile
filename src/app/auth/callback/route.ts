@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
+import { getSupabaseCredentials } from "@/lib/supabase/client";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,7 @@ export async function GET(request: NextRequest) {
 
   const targetUrl = new URL(next.startsWith("/") ? next : "/", requestUrl.origin);
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const { url: supabaseUrl, anonKey: supabaseAnonKey } = getSupabaseCredentials();
 
   const response = NextResponse.redirect(targetUrl.toString());
 
