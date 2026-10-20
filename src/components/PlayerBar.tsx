@@ -25,6 +25,7 @@ function formatTime(seconds: number): string {
 
 export function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const activeTrackIdRef = useRef<string | null>(null);
   const [hasError, setHasError] = useState(false);
 
   const {
@@ -55,28 +56,64 @@ export function PlayerBar() {
   const isLiked = currentTrack ? likedTrackIds.includes(currentTrack.id) : false;
 
   useEffect(() => {
-    if (!audioRef.current) return;
+    const audio = audioRef.current;
+    if (!audio) return;
     setHasError(false);
 
-    if (currentTrack) {
-      audioRef.current.src = `/api/stream?id=${currentTrack.id}`;
-      audioRef.current.load();
-      if (isPlaying) {
-        audioRef.current.play().catch((err) => console.warn("Autoplay notice:", err));
-      }
-    } else {
-      audioRef.current.src = "";
+    const targetTrackId = currentTrack?.id ?? null;
+    activeTrackIdRef.current = targetTrackId;
+
+    if (!targetTrackId) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      return;
     }
+
+    // Pause existing stream and reset source cleanly
+    audio.pause();
+    audio.src = `/api/stream?id=${targetTrackId}`;
+    audio.load();
+
+    if (isPlaying) {
+      audio
+        .play()
+        .catch((err: any) => {
+          // If track changed while async play was resolving, guard against stale track IDs
+          if (activeTrackIdRef.current !== targetTrackId) return;
+
+          // Ignore AbortError when rapidly skipping tracks
+          if (err?.name === "AbortError") return;
+
+          // For NotAllowedError (autoplay policy rejection) or media errors, reset Zustand playing state
+          console.warn("Audio playback interrupted or blocked:", err?.name, err?.message);
+          setIsPlaying(false);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack]);
 
   useEffect(() => {
-    if (!audioRef.current || !currentTrack) return;
+    const audio = audioRef.current;
+    if (!audio || !currentTrack) return;
+
     if (isPlaying) {
-      audioRef.current.play().catch((err) => console.warn(err));
+      if (audio.paused) {
+        audio
+          .play()
+          .catch((err: any) => {
+            if (err?.name === "AbortError") return;
+            console.warn("Audio play blocked by browser policy:", err?.name);
+            setIsPlaying(false);
+          });
+      }
     } else {
-      audioRef.current.pause();
+      if (!audio.paused) {
+        audio.pause();
+      }
     }
-  }, [isPlaying, currentTrack]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying]);
 
   useEffect(() => {
     if (!audioRef.current) return;
@@ -129,7 +166,11 @@ export function PlayerBar() {
     if (repeatMode === "one") {
       if (audioRef.current) {
         audioRef.current.currentTime = 0;
-        audioRef.current.play();
+        audioRef.current.play().catch((err: any) => {
+          if (err?.name !== "AbortError") {
+            setIsPlaying(false);
+          }
+        });
       }
     } else {
       nextTrack();
@@ -137,8 +178,9 @@ export function PlayerBar() {
   };
 
   const handleAudioError = () => {
-    console.warn("Audio stream error occurred, skipping to next track in 2s...");
+    console.warn("Audio stream error occurred, resetting state and skipping track:", currentTrack?.id);
     setHasError(true);
+    setIsPlaying(false);
     setTimeout(() => {
       setHasError(false);
       nextTrack();

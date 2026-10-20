@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { Track } from "@/types/music";
 import { useAuthStore } from "./auth-store";
 import { usePlayerStore } from "./player-store";
@@ -36,49 +36,60 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   closeCreateModal: () => set({ isCreateModalOpen: false }),
 
   fetchPlaylists: async () => {
+    if (!isSupabaseConfigured()) return;
     const user = useAuthStore.getState().user;
     if (!user) return;
 
     set({ isLoading: true });
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("playlists")
-      .select("id, name, description, created_at")
-      .order("created_at", { ascending: false });
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("playlists")
+        .select("id, name, description, created_at")
+        .order("created_at", { ascending: false });
 
-    if (!error && data) {
-      set({ playlists: data as Playlist[] });
+      if (!error && data) {
+        set({ playlists: data as Playlist[] });
+      }
+    } catch (e) {
+      console.warn("Failed to fetch playlists:", e);
     }
     set({ isLoading: false });
   },
 
   createPlaylist: async (name, description) => {
+    if (!isSupabaseConfigured()) return null;
     const user = useAuthStore.getState().user;
     if (!user) {
       useAuthStore.getState().openAuthModal();
       return null;
     }
 
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("playlists")
-      .insert({
-        user_id: user.id,
-        name,
-        description,
-      })
-      .select()
-      .single();
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("playlists")
+        .insert({
+          user_id: user.id,
+          name,
+          description,
+        })
+        .select()
+        .single();
 
-    if (!error && data) {
-      const newPlaylist = data as Playlist;
-      set((state) => ({ playlists: [newPlaylist, ...state.playlists], isCreateModalOpen: false }));
-      return newPlaylist;
+      if (!error && data) {
+        const newPlaylist = data as Playlist;
+        set((state) => ({ playlists: [newPlaylist, ...state.playlists], isCreateModalOpen: false }));
+        return newPlaylist;
+      }
+    } catch (e) {
+      console.warn("Failed to create playlist:", e);
     }
     return null;
   },
 
   deletePlaylist: async (id) => {
+    if (!isSupabaseConfigured()) return;
     const supabase = createClient();
     await supabase.from("playlists").delete().eq("id", id);
     set((state) => ({
@@ -87,6 +98,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   },
 
   addTrackToPlaylist: async (playlistId, track) => {
+    if (!isSupabaseConfigured()) return false;
     const user = useAuthStore.getState().user;
     if (!user) {
       useAuthStore.getState().openAuthModal();
@@ -107,6 +119,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   },
 
   syncVaultWithCloud: async () => {
+    if (!isSupabaseConfigured()) return;
     const user = useAuthStore.getState().user;
     if (!user) return;
 
@@ -145,6 +158,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   },
 
   persistVaultTrack: async (track, isLiked) => {
+    if (!isSupabaseConfigured()) return;
     const user = useAuthStore.getState().user;
     if (!user) return; // Stored in localStorage by default
 

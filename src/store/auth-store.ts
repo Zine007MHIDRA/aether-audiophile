@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { User, Session } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 interface AuthState {
   user: User | null;
@@ -30,17 +30,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setSession: (session) => set({ session }),
 
   initAuth: () => {
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      set({ session, user: session?.user || null, isLoading: false });
-    });
+    if (!isSupabaseConfigured()) {
+      set({ isLoading: false });
+      return;
+    }
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      set({ session, user: session?.user || null, isLoading: false });
-    });
+    try {
+      const supabase = createClient();
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        set({ session, user: session?.user || null, isLoading: false });
+      }).catch(() => {
+        set({ isLoading: false });
+      });
+
+      supabase.auth.onAuthStateChange((_event, session) => {
+        set({ session, user: session?.user || null, isLoading: false });
+      });
+    } catch {
+      set({ isLoading: false });
+    }
   },
 
   signInWithEmail: async (email, password) => {
+    if (!isSupabaseConfigured()) {
+      return { error: "Supabase authentication is not configured. Please add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your environment." };
+    }
+
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -54,6 +69,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signUpWithEmail: async (email, password) => {
+    if (!isSupabaseConfigured()) {
+      return { error: "Supabase authentication is not configured. Please add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your environment." };
+    }
+
     const supabase = createClient();
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -70,6 +89,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    if (!isSupabaseConfigured()) {
+      set({ user: null, session: null });
+      return;
+    }
+
     const supabase = createClient();
     await supabase.auth.signOut();
     set({ user: null, session: null });

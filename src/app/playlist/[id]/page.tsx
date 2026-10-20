@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ListMusic, Play, Trash2, Clock, Sparkles, Compass } from "lucide-react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { Track } from "@/types/music";
 import { TrackRow } from "@/components/TrackRow";
 import { usePlayerStore } from "@/store/player-store";
@@ -22,7 +22,10 @@ export default function PlaylistPage() {
   const deletePlaylist = usePlaylistStore((state) => state.deletePlaylist);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !isSupabaseConfigured()) {
+      setLoading(false);
+      return;
+    }
     const supabase = createClient();
 
     // Fetch playlist details
