@@ -10,7 +10,7 @@ import { TrackRow } from "@/components/TrackRow";
 import { usePlayerStore } from "@/store/player-store";
 import { usePlaylistStore, Playlist } from "@/store/playlist-store";
 
-const CHUNK_SIZE = 100;
+const CHUNK_SIZE = 200;
 
 export default function PlaylistPage() {
   const params = useParams();
@@ -84,12 +84,14 @@ export default function PlaylistPage() {
           setPlaylist(local);
         }
 
-        // Fetch playlist tracks
+        // Fetch playlist tracks (uncapped up to 5,000 tracks)
         const { data: trData } = await supabase
           .from("playlist_tracks")
           .select("track_id, title, artist, thumbnail, duration, position")
           .eq("playlist_id", id)
-          .order("position", { ascending: true });
+          .order("position", { ascending: true })
+          .limit(5000)
+          .range(0, 4999);
 
         if (trData && trData.length > 0) {
           const list: Track[] = trData.map((d: any) => ({
@@ -241,22 +243,30 @@ export default function PlaylistPage() {
               ))}
             </div>
 
-            {/* Progressive Loading Sentinel and Manual Action Button */}
+            {/* Progressive Loading Sentinel and Actions */}
             {visibleCount < tracks.length && (
               <div className="flex flex-col items-center justify-center py-8 gap-3">
                 <div ref={loadMoreRef} className="h-4 w-full pointer-events-none" />
-                <button
-                  onClick={() =>
-                    setVisibleCount((prev) =>
-                      Math.min(prev + CHUNK_SIZE, tracks.length)
-                    )
-                  }
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-aether-elevated hover:bg-aether-highlight border border-aether-gold/30 hover:border-aether-gold text-aether-gold text-xs font-mono tracking-wider transition shadow-sm hover:scale-105 active:scale-95"
-                >
-                  <span>
-                    Showing {visibleCount} of {tracks.length} compositions • Load 100 more
-                  </span>
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    onClick={() =>
+                      setVisibleCount((prev) =>
+                        Math.min(prev + CHUNK_SIZE, tracks.length)
+                      )
+                    }
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-aether-elevated hover:bg-aether-highlight border border-aether-gold/30 hover:border-aether-gold text-aether-gold text-xs font-mono tracking-wider transition shadow-sm hover:scale-105 active:scale-95"
+                  >
+                    <span>
+                      Showing {visibleCount} of {tracks.length} compositions • Load 200 more
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setVisibleCount(tracks.length)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-aether-surface hover:bg-aether-elevated border border-aether-border/60 hover:border-aether-gold/50 text-white text-xs font-mono tracking-wider transition shadow-sm hover:scale-105 active:scale-95"
+                  >
+                    <span>Show All ({tracks.length})</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

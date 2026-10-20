@@ -179,6 +179,112 @@ export async function POST(req: NextRequest) {
 
     if (spotifyMatch) {
       const spotifyId = spotifyMatch[1];
+      const spotifyClientId = process.env.SPOTIFY_CLIENT_ID;
+      const spotifyClientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+
+      // 1. If Spotify API credentials are configured, use Spotify Web API for full 2,000+ pagination
+      if (spotifyClientId && spotifyClientSecret) {
+        try {
+          const authHeader = Buffer.from(
+            `${spotifyClientId}:${spotifyClientSecret}`
+          ).toString("base64");
+
+          const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
+            method: "POST",
+            headers: {
+              Authorization: `Basic ${authHeader}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: "grant_type=client_credentials",
+          });
+
+          if (tokenRes.ok) {
+            const tokenData = await tokenRes.json();
+            const accessToken = tokenData.access_token;
+
+            // Fetch playlist details
+            const plRes = await fetch(
+              `https://api.spotify.com/v1/playlists/${spotifyId}?fields=name,images,tracks.total`,
+              {
+                headers: { Authorization: `Bearer ${accessToken}` },
+              }
+            );
+
+            if (plRes.ok) {
+              const plData = await plRes.json();
+              const name = plData.name || "Imported Spotify Playlist";
+              const coverUrl = plData.images?.[0]?.url;
+              const totalTracks = plData.tracks?.total || 0;
+
+              // Loop through track pages up to 2,000 tracks
+              const allItems: any[] = [];
+              let offset = 0;
+              const pageLimit = 100;
+              const maxLimit = 2000;
+
+              while (offset < totalTracks && offset < maxLimit) {
+                const pageRes = await fetch(
+                  `https://api.spotify.com/v1/playlists/${spotifyId}/tracks?limit=${pageLimit}&offset=${offset}&fields=items(track(name,artists(name),album(name,images),duration_ms))`,
+                  {
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                  }
+                );
+                if (!pageRes.ok) break;
+                const pageData = await pageRes.json();
+                const pageItems = pageData.items || [];
+                if (pageItems.length === 0) break;
+
+                for (const entry of pageItems) {
+                  const t = entry.track;
+                  if (!t || !t.name) continue;
+                  const title = t.name;
+                  const artist =
+                    (t.artists || []).map((a: any) => a.name).join(", ") ||
+                    "Unknown Artist";
+                  const durationMs = t.duration_ms || 0;
+                  const duration = Math.round(durationMs / 1000);
+                  const mins = Math.floor(duration / 60);
+                  const secs = duration % 60;
+                  const durationFormatted = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+                  const thumbnail =
+                    t.album?.images?.[0]?.url ||
+                    coverUrl ||
+                    "/branding/aether-logo.jpg";
+
+                  allItems.push({
+                    title,
+                    artist,
+                    album: t.album?.name,
+                    duration,
+                    durationFormatted,
+                    thumbnail,
+                  });
+                }
+
+                offset += pageItems.length;
+              }
+
+              if (allItems.length > 0) {
+                const queries = allItems
+                  .map((t) => `${t.title} ${t.artist}`.trim())
+                  .filter(Boolean);
+
+                return NextResponse.json({
+                  name,
+                  coverUrl,
+                  items: allItems,
+                  queries,
+                  needsMatching: true,
+                });
+              }
+            }
+          }
+        } catch (apiErr) {
+          console.warn("Spotify Web API error, falling back to embed:", apiErr);
+        }
+      }
+
+      // 2. Fallback to public embed endpoint
       try {
         const embedRes = await fetch(
           `https://open.spotify.com/embed/playlist/${spotifyId}`,
@@ -252,12 +358,18 @@ export async function POST(req: NextRequest) {
           );
         }
 
+        const truncatedWarning =
+          items.length >= 100
+            ? "Spotify public embed limit reached (100 tracks). To import 100+ to 2,000+ tracks without limits, drop an Exportify CSV or add SPOTIFY_CLIENT_ID to your environment."
+            : undefined;
+
         return NextResponse.json({
           name,
           coverUrl,
           items,
           queries,
           needsMatching: true,
+          truncatedWarning,
         });
       } catch (err: any) {
         console.error("Spotify import error:", err);
@@ -269,7 +381,7 @@ export async function POST(req: NextRequest) {
     }
 
     // -------------------------------------------------------------------------
-    // Case C: Deezer Playlist URL
+    // Case C: Deezer Playlist URL (with pagination up to 2,000 tracks)
     // -------------------------------------------------------------------------
     const deezerMatch = url.match(
       /(?:deezer\.com\/(?:[a-z]{2}\/)?playlist\/)(\d+)/i
@@ -301,7 +413,26 @@ export async function POST(req: NextRequest) {
         const coverUrl =
           json.picture_medium || json.picture_xl || json.picture;
 
-        const tracksData = json.tracks?.data || [];
+        let tracksData = [...(json.tracks?.data || [])];
+        let nextUrl = json.tracks?.next;
+        const maxLimit = 2000;
+
+        while (nextUrl && tracksData.length < maxLimit) {
+          try {
+            const nextRes = await fetch(nextUrl);
+            if (!nextRes.ok) break;
+            const nextJson = await nextRes.json();
+            if (nextJson.data && nextJson.data.length > 0) {
+              tracksData = tracksData.concat(nextJson.data);
+              nextUrl = nextJson.next;
+            } else {
+              break;
+            }
+          } catch {
+            break;
+          }
+        }
+
         const items = tracksData.map((t: any) => {
           const title = t.title || "Unknown Track";
           const artist = t.artist?.name || "Unknown Artist";

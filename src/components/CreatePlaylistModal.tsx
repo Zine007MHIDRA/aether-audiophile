@@ -65,6 +65,7 @@ export function CreatePlaylistModal() {
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [matchedCount, setMatchedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const cancelRef = useRef(false);
 
   // Sync tab on open
@@ -72,6 +73,7 @@ export function CreatePlaylistModal() {
     if (isCreateModalOpen) {
       setMainTab(initialTab || "create");
       setError(null);
+      setWarning(null);
       setProgress(null);
       setIsProcessing(false);
       setUrlInput("");
@@ -373,6 +375,10 @@ export function CreatePlaylistModal() {
         return;
       }
 
+      if (data.truncatedWarning) {
+        setWarning(data.truncatedWarning);
+      }
+
       if (!data.needsMatching && Array.isArray(data.tracks)) {
         // Direct YouTube tracks (up to 2,000 paginated tracks)
         setIsProcessing(true);
@@ -538,6 +544,23 @@ export function CreatePlaylistModal() {
           <div className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-950/40 border border-rose-800/40 text-rose-300 text-xs animate-in fade-in">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
             <span>{error}</span>
+          </div>
+        )}
+
+        {/* Warning Alert */}
+        {warning && (
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-950/40 border border-amber-800/40 text-amber-200 text-xs animate-in fade-in">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+            <div className="flex flex-col gap-1">
+              <span>{warning}</span>
+              <button
+                type="button"
+                onClick={() => setImportSubTab("file")}
+                className="text-aether-gold underline text-left font-medium hover:text-white"
+              >
+                Switch to Exportify CSV dropzone →
+              </button>
+            </div>
           </div>
         )}
 
@@ -779,6 +802,11 @@ export function CreatePlaylistModal() {
                   className="hidden"
                 />
 
+                <div className="flex items-center justify-between text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
+                  <span>Direct File Ingestion</span>
+                  <span className="text-aether-gold">Unlimited 1,000+ Compositions</span>
+                </div>
+
                 <div
                   onClick={() => fileInputRef.current?.click()}
                   className="border-2 border-dashed border-aether-border/70 hover:border-aether-gold/70 rounded-2xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2.5 bg-aether-dark/40 hover:bg-aether-dark/70"
@@ -794,6 +822,21 @@ export function CreatePlaylistModal() {
                       Supports Exportify CSV (Track Name, Artist, Album, Duration), .m3u, .txt
                     </span>
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-aether-subdued px-1">
+                  <span>
+                    Tip: Export any Spotify playlist with 1,000+ songs via{" "}
+                    <a
+                      href="https://exportify.net"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-aether-gold underline hover:text-white"
+                    >
+                      exportify.net
+                    </a>{" "}
+                    (1-click free CSV export)
+                  </span>
                 </div>
 
                 {parsedFileItems.length > 0 && (
