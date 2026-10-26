@@ -12,6 +12,7 @@ import { QueueDrawer } from "@/components/QueueDrawer";
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
 import { AudioVisualizerModal } from "@/components/AudioVisualizerModal";
 import { AudioEqualizerModal } from "@/components/AudioEqualizerModal";
+import { SleepTimerModal } from "@/components/SleepTimerModal";
 
 export const metadata: Metadata = {
   title: "Aether — Audiophile Music",
@@ -72,6 +73,7 @@ export default function RootLayout({
         <KeyboardShortcutsModal />
         <AudioVisualizerModal />
         <AudioEqualizerModal />
+        <SleepTimerModal />
       </body>
     </html>
   );

@@ -17,11 +17,13 @@ import {
   ListMusic,
   Activity,
   Sliders,
+  Moon,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { usePlaylistStore } from "@/store/playlist-store";
 import { useContextMenuStore } from "@/store/context-menu-store";
 import { useEqualizerStore } from "@/store/equalizer-store";
+import { useSleepTimerStore } from "@/store/sleep-timer-store";
 import type { YTPlayerInstance } from "@/types/youtube-iframe";
 import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
@@ -29,6 +31,13 @@ function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return "0:00";
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+}
+
+function formatSleepCountdown(totalSec: number): string {
+  if (totalSec <= 0) return "0:00";
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
   return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
 }
 
@@ -76,6 +85,14 @@ export function PlayerBar() {
     toggleEqualizer,
     isEnabled: isEqualizerEnabled,
   } = useEqualizerStore();
+  const {
+    isOpen: isSleepTimerOpen,
+    isActive: isSleepTimerActive,
+    remainingSeconds: sleepRemainingSeconds,
+    isFadingOut: isSleepFadingOut,
+    openModal: openSleepTimerModal,
+    toggleModal: toggleSleepTimerModal,
+  } = useSleepTimerStore();
 
   const isLiked = currentTrack ? likedTrackIds.includes(currentTrack.id) : false;
   const currentTime = progress;
@@ -754,6 +771,33 @@ export function PlayerBar() {
           >
             <Sliders className="w-4 h-4" />
             {isEqualizerEnabled && (
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#D4AF37] shadow-[0_0_6px_#D4AF37]" />
+            )}
+          </button>
+
+          {/* Active Sleep Timer Countdown Pill */}
+          {isSleepTimerActive && (
+            <button
+              onClick={openSleepTimerModal}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-[#F3E5AB] text-[10px] font-mono shadow-[0_0_12px_rgba(212,175,55,0.3)] hover:bg-[#D4AF37]/30 transition shrink-0 animate-in fade-in"
+              title="Sleep Timer Active - Click to manage"
+            >
+              <Moon className={`w-3 h-3 text-[#D4AF37] ${isSleepFadingOut ? "animate-ping" : ""}`} />
+              <span>{formatSleepCountdown(sleepRemainingSeconds)}</span>
+            </button>
+          )}
+
+          <button
+            onClick={toggleSleepTimerModal}
+            className={`p-1.5 rounded-lg transition relative ${
+              isSleepTimerOpen || isSleepTimerActive
+                ? "text-aether-gold bg-aether-gold-glow border border-aether-gold/30"
+                : "text-aether-muted hover:text-white"
+            }`}
+            title="Sleep Timer (T)"
+          >
+            <Moon className="w-4 h-4" />
+            {isSleepTimerActive && (
               <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#D4AF37] shadow-[0_0_6px_#D4AF37]" />
             )}
           </button>

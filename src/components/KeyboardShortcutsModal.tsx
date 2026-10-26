@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { X, Command, Sparkles, Keyboard } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { useEqualizerStore } from "@/store/equalizer-store";
+import { useSleepTimerStore } from "@/store/sleep-timer-store";
 
 interface ShortcutItem {
   key: string;
@@ -29,6 +30,7 @@ const SHORTCUT_GROUPS: { group: string; shortcuts: ShortcutItem[] }[] = [
       { key: "L", label: "L", action: "Synced Lyrics" },
       { key: "V", label: "V", action: "Spectrum Visualizer" },
       { key: "E", label: "E", action: "Acoustic Equalizer" },
+      { key: "T", label: "T", action: "Sleep Timer" },
       { key: "Q", label: "Q", action: "Up Next Queue" },
       { key: "S", label: "S", action: "Toggle Shuffle" },
       { key: "R", label: "R", action: "Cycle Repeat Mode" },
@@ -64,6 +66,7 @@ export function KeyboardShortcutsModal() {
     setIsQueueOpen,
   } = usePlayerStore();
   const { toggleEqualizer } = useEqualizerStore();
+  const { toggleModal: toggleSleepTimer } = useSleepTimerStore();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -163,6 +166,12 @@ export function KeyboardShortcutsModal() {
           toggleEqualizer();
           break;
 
+        case "t":
+        case "T":
+          e.preventDefault();
+          toggleSleepTimer();
+          break;
+
         case "q":
         case "Q":
           e.preventDefault();
@@ -218,6 +227,7 @@ export function KeyboardShortcutsModal() {
     toggleQueue,
     toggleVisualizer,
     toggleEqualizer,
+    toggleSleepTimer,
     toggleShuffle,
     toggleRepeat,
   ]);
