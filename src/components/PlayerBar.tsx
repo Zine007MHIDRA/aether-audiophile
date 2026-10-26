@@ -13,9 +13,11 @@ import {
   Bookmark,
   Mic2,
   AlertCircle,
+  MoreHorizontal,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { usePlaylistStore } from "@/store/playlist-store";
+import { useContextMenuStore } from "@/store/context-menu-store";
 import type { YTPlayerInstance } from "@/types/youtube-iframe";
 import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
@@ -59,6 +61,7 @@ export function PlayerBar() {
     toggleLike,
     toggleLyrics,
   } = usePlayerStore();
+  const { openContextMenu } = useContextMenuStore();
 
   const isLiked = currentTrack ? likedTrackIds.includes(currentTrack.id) : false;
   const currentTime = progress;
@@ -518,19 +521,40 @@ export function PlayerBar() {
       {/* Floating Dynamic Island Luxury Player Dock */}
       <div className="fixed bottom-3 md:bottom-5 left-1/2 -translate-x-1/2 w-[95%] md:w-[92%] max-w-4xl z-50 bg-zinc-950/85 backdrop-blur-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] rounded-2xl px-3 md:px-5 py-2.5 md:py-3 select-none flex items-center justify-between transition-all duration-300">
         {/* Left: Track Information */}
-        <div className="flex items-center gap-2.5 md:gap-3.5 min-w-[220px] max-w-[280px] shrink-0 pr-2">
+        <div
+          onContextMenu={(e) => {
+            if (currentTrack) {
+              e.preventDefault();
+              openContextMenu(currentTrack, { x: e.clientX, y: e.clientY });
+            }
+          }}
+          className="flex items-center gap-2.5 md:gap-3.5 min-w-[220px] max-w-[280px] shrink-0 pr-2"
+        >
           {currentTrack ? (
             <>
-              <div className="relative w-10 h-10 md:w-12 md:h-12 rounded-xl overflow-hidden shrink-0 bg-aether-elevated border border-aether-border/60 shadow-md">
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openContextMenu(currentTrack, { x: e.clientX, y: e.clientY });
+                }}
+                className="relative w-10 h-10 md:w-12 md:h-12 rounded-xl overflow-hidden shrink-0 bg-aether-elevated border border-aether-border/60 shadow-md cursor-pointer group/art"
+                title="Options"
+              >
                 <img
                   src={getHighResThumbnail(currentTrack.thumbnail, currentTrack.id)}
                   alt={currentTrack.title}
                   onError={(e) => handleImageError(e, currentTrack.id)}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover group-hover/art:scale-105 transition-transform duration-300"
                 />
               </div>
               <div className="flex flex-col min-w-0 pr-1 flex-1">
-                <span className="text-white text-xs font-semibold tracking-wide truncate hover:text-[#F3E5AB] transition cursor-pointer">
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openContextMenu(currentTrack, { x: e.clientX, y: e.clientY });
+                  }}
+                  className="text-white text-xs font-semibold tracking-wide truncate hover:text-[#F3E5AB] transition cursor-pointer"
+                >
                   {currentTrack.title}
                 </span>
                 <span className="text-aether-subdued text-[10px] md:text-[11px] truncate mt-0.5">
@@ -547,6 +571,16 @@ export function PlayerBar() {
                 title={isLiked ? "Saved in Vault" : "Save to Vault"}
               >
                 <Bookmark className={`w-3.5 h-3.5 ${isLiked ? "fill-aether-gold" : ""}`} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openContextMenu(currentTrack, { x: e.clientX, y: e.clientY });
+                }}
+                className="p-1.5 rounded-lg text-aether-muted hover:text-white transition shrink-0 hidden sm:block hover:bg-white/5"
+                title="Track options"
+              >
+                <MoreHorizontal className="w-3.5 h-3.5" />
               </button>
             </>
           ) : (

@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
-import { Play, Bookmark } from "lucide-react";
+import { Play, Bookmark, MoreHorizontal } from "lucide-react";
 import { Track } from "@/types/music";
 import { usePlayerStore } from "@/store/player-store";
+import { useContextMenuStore } from "@/store/context-menu-store";
 import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
 interface TrackRowProps {
@@ -21,6 +22,7 @@ export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
     togglePlay,
     toggleLike,
   } = usePlayerStore();
+  const { openContextMenu } = useContextMenuStore();
 
   const isCurrent = currentTrack?.id === track.id;
   const isLiked = likedTrackIds.includes(track.id);
@@ -34,9 +36,16 @@ export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(track, { x: e.clientX, y: e.clientY }, tracksContext);
+  };
+
   return (
     <div
       onClick={handleRowClick}
+      onContextMenu={handleContextMenu}
       className={`group flex items-center justify-between px-3 py-2.5 rounded-xl transition cursor-pointer select-none text-xs ${
         isCurrent
           ? "bg-gradient-to-r from-[#D4AF37]/15 via-[#D4AF37]/5 to-transparent border border-[#D4AF37]/30 shadow-[inset_3px_0_0_#D4AF37]"
@@ -116,6 +125,16 @@ export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
           />
         </button>
         <span className="w-10 text-right">{track.durationFormatted}</span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            openContextMenu(track, { x: e.clientX, y: e.clientY }, tracksContext);
+          }}
+          className="p-1 rounded text-zinc-400 hover:text-white transition opacity-60 md:opacity-0 group-hover:opacity-100 hover:bg-white/10"
+          title="More options"
+        >
+          <MoreHorizontal className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );

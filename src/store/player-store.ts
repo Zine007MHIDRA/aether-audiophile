@@ -33,6 +33,7 @@ interface PlayerState {
   toggleLike: (track: Track) => void;
   toggleLyrics: () => void;
   addToQueue: (track: Track) => void;
+  playNext: (track: Track) => void;
   resolveTrack: (oldId: string, updatedTrack: Partial<Track>) => void;
 }
 
@@ -167,10 +168,27 @@ export const usePlayerStore = create<PlayerState>()(
 
       toggleLyrics: () => set((state) => ({ isLyricsOpen: !state.isLyricsOpen })),
 
-      addToQueue: (track) =>
+      addToQueue: (track) => {
+        const { queue } = get();
+        if (queue.length === 0) {
+          get().playTrack(track);
+          return;
+        }
         set((state) => ({
           queue: [...state.queue, track],
-        })),
+        }));
+      },
+
+      playNext: (track) => {
+        const { queue, queueIndex } = get();
+        if (queue.length === 0 || queueIndex === -1) {
+          get().playTrack(track);
+          return;
+        }
+        const newQueue = [...queue];
+        newQueue.splice(queueIndex + 1, 0, track);
+        set({ queue: newQueue });
+      },
 
       resolveTrack: (oldId, updatedTrack) => {
         set((state) => {

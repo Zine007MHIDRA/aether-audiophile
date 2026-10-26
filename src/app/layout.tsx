@@ -7,6 +7,7 @@ import { LyricsModal } from "@/components/LyricsModal";
 import { AuthModal } from "@/components/AuthModal";
 import { CreatePlaylistModal } from "@/components/CreatePlaylistModal";
 import { AuthInitializer } from "@/components/AuthInitializer";
+import { TrackContextMenu } from "@/components/TrackContextMenu";
 
 export const metadata: Metadata = {
   title: "Aether — Audiophile Music",
@@ -62,6 +63,7 @@ export default function RootLayout({
         <LyricsModal />
         <AuthModal />
         <CreatePlaylistModal />
+        <TrackContextMenu />
       </body>
     </html>
   );
