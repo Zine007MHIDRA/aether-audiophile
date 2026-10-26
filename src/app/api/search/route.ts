@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getInnertube } from "@/lib/youtube";
+import { getInnertube, getHighResThumbnail } from "@/lib/youtube";
 import { Track } from "@/types/music";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +24,12 @@ export async function GET(req: NextRequest) {
         const durationSec = item.duration?.seconds || 0;
         const durationFormatted = item.duration?.text || "3:30";
         const artistName = item.artists?.[0]?.name || item.author?.name || "Various Artists";
-        const thumbnail =
-          item.thumbnails?.[item.thumbnails.length - 1]?.url ||
-          `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`;
+        
+        // Pick highest resolution thumbnail and upgrade
+        const rawThumbnail =
+          item.thumbnails?.[0]?.url ||
+          item.thumbnails?.[item.thumbnails.length - 1]?.url;
+        const thumbnail = getHighResThumbnail(rawThumbnail, item.id);
 
         tracks.push({
           id: item.id,
@@ -49,13 +52,16 @@ export async function GET(req: NextRequest) {
 
       for (const item of videos) {
         if (!item.id) continue;
+        const rawThumbnail = item.thumbnails?.[0]?.url;
+        const thumbnail = getHighResThumbnail(rawThumbnail, item.id);
+
         tracks.push({
           id: item.id,
           title: item.title?.text || "Unknown",
           artist: item.author?.name || "Unknown",
           duration: item.duration?.seconds || 0,
           durationFormatted: item.duration?.text || "3:00",
-          thumbnail: item.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
+          thumbnail,
         });
       }
     }

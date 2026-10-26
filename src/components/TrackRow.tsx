@@ -4,6 +4,7 @@ import React from "react";
 import { Play, Bookmark } from "lucide-react";
 import { Track } from "@/types/music";
 import { usePlayerStore } from "@/store/player-store";
+import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
 interface TrackRowProps {
   track: Track;
@@ -23,6 +24,7 @@ export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
 
   const isCurrent = currentTrack?.id === track.id;
   const isLiked = likedTrackIds.includes(track.id);
+  const thumbnailSrc = getHighResThumbnail(track.thumbnail, track.id);
 
   const handleRowClick = () => {
     if (isCurrent) {
@@ -64,8 +66,9 @@ export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
         {/* Artwork Thumbnail */}
         <div className="w-10 h-10 rounded-lg overflow-hidden bg-aether-highlight shrink-0 shadow border border-aether-border/40">
           <img
-            src={track.thumbnail}
+            src={thumbnailSrc}
             alt={track.title}
+            onError={(e) => handleImageError(e, track.id)}
             className="w-full h-full object-cover"
           />
         </div>

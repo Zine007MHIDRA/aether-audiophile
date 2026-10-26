@@ -24,3 +24,5 @@ export async function getInnertube(): Promise<Innertube> {
 
   return initPromise;
 }
+
+export { getHighResThumbnail } from "./image";

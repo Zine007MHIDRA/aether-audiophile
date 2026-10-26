@@ -5,6 +5,7 @@ import { Search as SearchIcon, X, Play, Pause, Disc } from "lucide-react";
 import { Track } from "@/types/music";
 import { TrackRow } from "@/components/TrackRow";
 import { usePlayerStore } from "@/store/player-store";
+import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
 const MOODS = [
   { name: "Nocturne Ambient", sub: "Atmospheric & Calm", gradient: "from-[#14151C] to-[#1E1F2A]" },
@@ -102,8 +103,9 @@ export default function SearchPage() {
                   {/* Artwork Container */}
                   <div className="relative w-28 h-28 rounded-xl overflow-hidden bg-aether-highlight shadow-xl mb-5 border border-white/10 group-hover:border-[#D4AF37]/40 transition-all duration-300 shrink-0 z-10">
                     <img
-                      src={topResult.thumbnail}
+                      src={getHighResThumbnail(topResult.thumbnail, topResult.id)}
                       alt={topResult.title}
+                      onError={(e) => handleImageError(e, topResult.id)}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                   </div>

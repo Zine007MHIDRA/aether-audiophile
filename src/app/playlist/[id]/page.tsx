@@ -9,6 +9,7 @@ import { Track } from "@/types/music";
 import { TrackRow } from "@/components/TrackRow";
 import { usePlayerStore } from "@/store/player-store";
 import { usePlaylistStore, Playlist } from "@/store/playlist-store";
+import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
 const CHUNK_SIZE = 200;
 
@@ -150,8 +151,9 @@ export default function PlaylistPage() {
           <div className="w-24 h-24 sm:w-36 sm:h-36 md:w-44 md:h-44 rounded-2xl bg-gradient-to-br from-aether-surface via-aether-elevated to-aether-highlight border border-aether-gold/40 flex items-center justify-center text-aether-gold shadow-gold-glow shrink-0 overflow-hidden">
             {playlist?.coverUrl ? (
               <img
-                src={playlist.coverUrl}
+                src={getHighResThumbnail(playlist.coverUrl)}
                 alt={playlist.name}
+                onError={(e) => handleImageError(e)}
                 className="w-full h-full object-cover"
               />
             ) : (

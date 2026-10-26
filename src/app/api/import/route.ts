@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getInnertube } from "@/lib/youtube";
+import { getInnertube, getHighResThumbnail } from "@/lib/youtube";
 import { Track } from "@/types/music";
 
 export const dynamic = "force-dynamic";
@@ -133,10 +133,11 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          const thumbnail =
-            v.thumbnails?.[v.thumbnails.length - 1]?.url ||
+          const rawThumbnail =
+            v.thumbnails?.[0]?.url ||
             v.content_image?.image?.[0]?.url ||
-            `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+            v.thumbnails?.[v.thumbnails.length - 1]?.url;
+          const thumbnail = getHighResThumbnail(rawThumbnail, id);
 
           tracks.push({
             id,
@@ -447,7 +448,11 @@ export async function POST(req: NextRequest) {
             duration,
             durationFormatted,
             thumbnail:
-              t.album?.cover_medium || coverUrl || "/branding/aether-logo.jpg",
+              t.album?.cover_xl ||
+              t.album?.cover_big ||
+              t.album?.cover_medium ||
+              coverUrl ||
+              "/branding/aether-logo.jpg",
           };
         });
 

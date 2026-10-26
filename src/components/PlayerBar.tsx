@@ -17,6 +17,7 @@ import {
 import { usePlayerStore } from "@/store/player-store";
 import { usePlaylistStore } from "@/store/playlist-store";
 import type { YTPlayerInstance } from "@/types/youtube-iframe";
+import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return "0:00";
@@ -410,13 +411,15 @@ export function PlayerBar() {
       return;
     }
 
+    const highResArtwork = getHighResThumbnail(currentTrack.thumbnail, currentTrack.id);
+
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,
       artist: currentTrack.artist,
       album: currentTrack.album || "Aether Hi-Fi",
       artwork: [
         {
-          src: currentTrack.thumbnail,
+          src: highResArtwork,
           sizes: "512x512",
           type: "image/jpeg",
         },
@@ -520,8 +523,9 @@ export function PlayerBar() {
             <>
               <div className="relative w-10 h-10 md:w-12 md:h-12 rounded-xl overflow-hidden shrink-0 bg-aether-elevated border border-aether-border/60 shadow-md">
                 <img
-                  src={currentTrack.thumbnail}
+                  src={getHighResThumbnail(currentTrack.thumbnail, currentTrack.id)}
                   alt={currentTrack.title}
+                  onError={(e) => handleImageError(e, currentTrack.id)}
                   className="w-full h-full object-cover"
                 />
               </div>

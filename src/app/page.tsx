@@ -6,6 +6,7 @@ import { TrackCard } from "@/components/TrackCard";
 import { TrackRow } from "@/components/TrackRow";
 import { Play, Sparkles, Disc, Radio } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
+import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
 export default function HomePage() {
   const [trendingTracks, setTrendingTracks] = useState<Track[]>([]);
@@ -63,8 +64,9 @@ export default function HomePage() {
           {/* Hero Visual Disk */}
           <div className="relative w-44 h-44 md:w-56 md:h-56 rounded-2xl overflow-hidden border border-aether-gold/30 shadow-2xl shrink-0 group">
             <img
-              src={heroTrack.thumbnail}
+              src={getHighResThumbnail(heroTrack.thumbnail, heroTrack.id)}
               alt={heroTrack.title}
+              onError={(e) => handleImageError(e, heroTrack.id)}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />

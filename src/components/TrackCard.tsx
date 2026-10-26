@@ -4,6 +4,7 @@ import React from "react";
 import { Play, Pause } from "lucide-react";
 import { Track } from "@/types/music";
 import { usePlayerStore } from "@/store/player-store";
+import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
 interface TrackCardProps {
   track: Track;
@@ -14,6 +15,7 @@ export function TrackCard({ track, tracksContext }: TrackCardProps) {
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
 
   const isCurrent = currentTrack?.id === track.id;
+  const thumbnailSrc = getHighResThumbnail(track.thumbnail, track.id);
 
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -31,8 +33,9 @@ export function TrackCard({ track, tracksContext }: TrackCardProps) {
     >
       <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-aether-highlight shadow-md">
         <img
-          src={track.thumbnail}
+          src={thumbnailSrc}
           alt={track.title}
+          onError={(e) => handleImageError(e, track.id)}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
         />
 
