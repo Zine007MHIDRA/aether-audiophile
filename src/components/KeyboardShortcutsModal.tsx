@@ -5,6 +5,7 @@ import { X, Command, Sparkles, Keyboard } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { useEqualizerStore } from "@/store/equalizer-store";
 import { useSleepTimerStore } from "@/store/sleep-timer-store";
+import { useAudioDynamicsStore } from "@/store/audio-dynamics-store";
 
 interface ShortcutItem {
   key: string;
@@ -30,6 +31,7 @@ const SHORTCUT_GROUPS: { group: string; shortcuts: ShortcutItem[] }[] = [
       { key: "L", label: "L", action: "Synced Lyrics" },
       { key: "V", label: "V", action: "Spectrum Visualizer" },
       { key: "E", label: "E", action: "Acoustic Equalizer" },
+      { key: "D", label: "D", action: "Audio Dynamics (Crossfade & LUFS)" },
       { key: "T", label: "T", action: "Sleep Timer" },
       { key: "Q", label: "Q", action: "Up Next Queue" },
       { key: "S", label: "S", action: "Toggle Shuffle" },
@@ -67,6 +69,7 @@ export function KeyboardShortcutsModal() {
   } = usePlayerStore();
   const { toggleEqualizer } = useEqualizerStore();
   const { toggleModal: toggleSleepTimer } = useSleepTimerStore();
+  const { toggleModal: toggleAudioDynamics } = useAudioDynamicsStore();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -166,6 +169,12 @@ export function KeyboardShortcutsModal() {
           toggleEqualizer();
           break;
 
+        case "d":
+        case "D":
+          e.preventDefault();
+          toggleAudioDynamics();
+          break;
+
         case "t":
         case "T":
           e.preventDefault();
@@ -228,6 +237,7 @@ export function KeyboardShortcutsModal() {
     toggleVisualizer,
     toggleEqualizer,
     toggleSleepTimer,
+    toggleAudioDynamics,
     toggleShuffle,
     toggleRepeat,
   ]);

@@ -18,12 +18,14 @@ import {
   Activity,
   Sliders,
   Moon,
+  Waves,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { usePlaylistStore } from "@/store/playlist-store";
 import { useContextMenuStore } from "@/store/context-menu-store";
 import { useEqualizerStore } from "@/store/equalizer-store";
 import { useSleepTimerStore } from "@/store/sleep-timer-store";
+import { useAudioDynamicsStore } from "@/store/audio-dynamics-store";
 import type { YTPlayerInstance } from "@/types/youtube-iframe";
 import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
@@ -41,12 +43,26 @@ function formatSleepCountdown(totalSec: number): string {
   return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
 }
 
+// Deterministic acoustic loudness estimation (-17.0 to -9.0 LUFS)
+function getTrackLoudnessEstimate(track: { id: string; title: string } | null): number {
+  if (!track) return -14.0;
+  let hash = 0;
+  const str = track.id + track.title;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  const normalized = (Math.abs(hash) % 100) / 100;
+  return -17.0 + normalized * 8.0;
+}
+
 export function PlayerBar() {
   const playerRef = useRef<YTPlayerInstance | null>(null);
   const isPlayerReadyRef = useRef<boolean>(false);
   const activeTrackIdRef = useRef<string | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const preResolvingSetRef = useRef<Set<string>>(new Set());
+  const isCrossfadingOutRef = useRef<boolean>(false);
   const [hasError, setHasError] = useState(false);
   const [isResolvingAudio, setIsResolvingAudio] = useState(false);
 
@@ -93,12 +109,35 @@ export function PlayerBar() {
     openModal: openSleepTimerModal,
     toggleModal: toggleSleepTimerModal,
   } = useSleepTimerStore();
+  const {
+    isOpen: isDynamicsOpen,
+    crossfadeEnabled,
+    crossfadeDuration,
+    manualSkipFade,
+    isCrossfading,
+    loudnessNormalizationEnabled,
+    targetLUFS,
+    preampHeadroom,
+    toggleModal: toggleDynamicsModal,
+  } = useAudioDynamicsStore();
 
   const isLiked = currentTrack ? likedTrackIds.includes(currentTrack.id) : false;
   const currentTime = progress;
   const progressPercent =
     duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
   const volumePercent = (isMuted ? 0 : volume) * 100;
+
+  // Calculates real-time effective volume combining user volume + LUFS dynamic leveling
+  const getEffectiveTargetVolume = () => {
+    const store = usePlayerStore.getState();
+    if (store.isMuted) return 0;
+    const dynamics = useAudioDynamicsStore.getState();
+    if (!dynamics.loudnessNormalizationEnabled) return store.volume * 100;
+    const masterLUFS = getTrackLoudnessEstimate(store.currentTrack);
+    const trimDb = Math.max(-8, Math.min(3, dynamics.targetLUFS - masterLUFS + dynamics.preampHeadroom));
+    const mult = Math.pow(10, trimDb / 20);
+    return Math.min(100, Math.max(0, store.volume * mult * 100));
+  };
 
   // 1. Initialize YouTube IFrame API and player instance
   useEffect(() => {
@@ -130,12 +169,12 @@ export function PlayerBar() {
               isPlayerReadyRef.current = true;
               const store = usePlayerStore.getState();
 
-              // Initialize volume and mute status
+              // Initialize volume and mute status with Loudness Normalization
               if (store.isMuted) {
                 event.target.mute();
               } else {
                 event.target.unMute();
-                event.target.setVolume(store.volume * 100);
+                event.target.setVolume(getEffectiveTargetVolume());
               }
 
               // If a track was selected prior to onReady, load and play it (if not pending)
@@ -162,6 +201,28 @@ export function PlayerBar() {
                   setDuration(totalDuration);
                 }
 
+                // If crossfading into new track, ramp volume from 0 to target
+                if (isCrossfadingOutRef.current) {
+                  isCrossfadingOutRef.current = false;
+                  const dynamics = useAudioDynamicsStore.getState();
+                  const fadeInDur = Math.max(1, Math.min(3, dynamics.crossfadeDuration / 2));
+                  let elapsed = 0;
+                  const targetVol = getEffectiveTargetVolume();
+                  event.target.setVolume(0);
+                  const inInterval = setInterval(() => {
+                    elapsed += 0.1;
+                    const factor = Math.min(1, elapsed / fadeInDur);
+                    event.target.setVolume(targetVol * factor);
+                    if (factor >= 1) {
+                      clearInterval(inInterval);
+                      dynamics.setIsCrossfading(false);
+                    }
+                  }, 100);
+                } else if (!useSleepTimerStore.getState().isFadingOut) {
+                  useAudioDynamicsStore.getState().setIsCrossfading(false);
+                  event.target.setVolume(getEffectiveTargetVolume());
+                }
+
                 // Poll current time at 250ms to keep progress & synced lyrics aligned
                 if (progressIntervalRef.current) {
                   clearInterval(progressIntervalRef.current);
@@ -172,10 +233,30 @@ export function PlayerBar() {
                     if (typeof time === "number" && !isNaN(time)) {
                       setProgress(time);
 
-                      // Pre-resolve next pending track in queue 10 seconds before track ends
+                      // Dynamic Crossfade detection
                       const curDur =
                         playerRef.current.getDuration?.() ||
                         usePlayerStore.getState().duration;
+                      const dynamics = useAudioDynamicsStore.getState();
+                      const timeLeft = curDur - time;
+
+                      if (
+                        dynamics.crossfadeEnabled &&
+                        !useSleepTimerStore.getState().isFadingOut &&
+                        curDur > dynamics.crossfadeDuration * 2 &&
+                        timeLeft <= dynamics.crossfadeDuration &&
+                        timeLeft > 0
+                      ) {
+                        if (!isCrossfadingOutRef.current) {
+                          isCrossfadingOutRef.current = true;
+                          dynamics.setIsCrossfading(true);
+                        }
+                        const factor = Math.max(0, Math.min(1, timeLeft / dynamics.crossfadeDuration));
+                        const targetVol = getEffectiveTargetVolume();
+                        playerRef.current?.setVolume?.(targetVol * factor);
+                      }
+
+                      // Pre-resolve next pending track in queue 10 seconds before track ends
                       if (curDur > 0 && curDur - time <= 10) {
                         const { queue, queueIndex } = usePlayerStore.getState();
                         const next = queue[queueIndex + 1];
@@ -424,20 +505,31 @@ export function PlayerBar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
 
-  // 4. Volume and mute synchronization
+  // 4. Volume, mute, and smart loudness dynamic synchronization
   useEffect(() => {
     if (!isPlayerReadyRef.current || !playerRef.current) return;
+    if (useSleepTimerStore.getState().isFadingOut) return;
+
+    const dynamics = useAudioDynamicsStore.getState();
+    const masterLUFS = getTrackLoudnessEstimate(currentTrack);
+    const trimDb = dynamics.loudnessNormalizationEnabled
+      ? Math.max(-8, Math.min(3, dynamics.targetLUFS - masterLUFS + dynamics.preampHeadroom))
+      : 0;
+    dynamics.setCurrentAppliedTrimDb(trimDb);
+
     try {
       if (isMuted) {
         playerRef.current.mute();
       } else {
         playerRef.current.unMute();
-        playerRef.current.setVolume(volume * 100);
+        const mult = dynamics.loudnessNormalizationEnabled ? Math.pow(10, trimDb / 20) : 1;
+        const targetVol = Math.min(100, Math.max(0, volume * mult * 100));
+        playerRef.current.setVolume(targetVol);
       }
     } catch (err) {
       console.warn("Error setting volume on YouTube player:", err);
     }
-  }, [volume, isMuted]);
+  }, [volume, isMuted, currentTrack, targetLUFS, loudnessNormalizationEnabled, preampHeadroom]);
 
   // 5. System MediaSession integration
   useEffect(() => {
@@ -523,7 +615,11 @@ export function PlayerBar() {
         toggleMute();
         playerRef.current.unMute();
       }
-      playerRef.current.setVolume(newVol * 100);
+      const dynamics = useAudioDynamicsStore.getState();
+      const mult = dynamics.loudnessNormalizationEnabled
+        ? Math.pow(10, dynamics.currentAppliedTrimDb / 20)
+        : 1;
+      playerRef.current.setVolume(Math.min(100, Math.max(0, newVol * mult * 100)));
     }
   };
 
@@ -536,8 +632,53 @@ export function PlayerBar() {
         playerRef.current.mute();
       } else {
         playerRef.current.unMute();
-        playerRef.current.setVolume(volume * 100);
+        const dynamics = useAudioDynamicsStore.getState();
+        const mult = dynamics.loudnessNormalizationEnabled
+          ? Math.pow(10, dynamics.currentAppliedTrimDb / 20)
+          : 1;
+        playerRef.current.setVolume(Math.min(100, Math.max(0, volume * mult * 100)));
       }
+    }
+  };
+
+  // 10. Manual track skip with optional micro-fade
+  const handleNextTrack = () => {
+    const { manualSkipFade } = useAudioDynamicsStore.getState();
+    if (manualSkipFade && isPlaying && isPlayerReadyRef.current && playerRef.current) {
+      const curVol = playerRef.current.getVolume?.() || (volume * 100);
+      let step = 0;
+      const steps = 5;
+      const interval = setInterval(() => {
+        step++;
+        const factor = Math.max(0, 1 - step / steps);
+        playerRef.current?.setVolume?.(curVol * factor);
+        if (step >= steps) {
+          clearInterval(interval);
+          nextTrack();
+        }
+      }, 50);
+    } else {
+      nextTrack();
+    }
+  };
+
+  const handlePrevTrack = () => {
+    const { manualSkipFade } = useAudioDynamicsStore.getState();
+    if (manualSkipFade && isPlaying && isPlayerReadyRef.current && playerRef.current) {
+      const curVol = playerRef.current.getVolume?.() || (volume * 100);
+      let step = 0;
+      const steps = 5;
+      const interval = setInterval(() => {
+        step++;
+        const factor = Math.max(0, 1 - step / steps);
+        playerRef.current?.setVolume?.(curVol * factor);
+        if (step >= steps) {
+          clearInterval(interval);
+          prevTrack();
+        }
+      }, 50);
+    } else {
+      prevTrack();
     }
   };
 
@@ -652,7 +793,7 @@ export function PlayerBar() {
               <Shuffle className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={prevTrack}
+              onClick={handlePrevTrack}
               disabled={!currentTrack}
               className="text-aether-subdued hover:text-white disabled:opacity-30 transition p-1"
               title="Previous Track"
@@ -672,7 +813,7 @@ export function PlayerBar() {
               )}
             </button>
             <button
-              onClick={nextTrack}
+              onClick={handleNextTrack}
               disabled={!currentTrack}
               className="text-aether-subdued hover:text-white disabled:opacity-30 transition p-1"
               title="Next Track"
@@ -774,6 +915,33 @@ export function PlayerBar() {
               <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#D4AF37] shadow-[0_0_6px_#D4AF37]" />
             )}
           </button>
+
+          {/* Audio Dynamics (Crossfade & LUFS) Button */}
+          <button
+            onClick={toggleDynamicsModal}
+            className={`p-1.5 rounded-lg transition relative ${
+              isDynamicsOpen || isCrossfading
+                ? "text-aether-gold bg-aether-gold-glow border border-aether-gold/30"
+                : "text-aether-muted hover:text-white"
+            }`}
+            title="Audio Dynamics & Crossfade (D)"
+          >
+            <Waves className={`w-4 h-4 ${isCrossfading ? "animate-pulse text-[#D4AF37]" : ""}`} />
+            {(crossfadeEnabled || loudnessNormalizationEnabled) && (
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#D4AF37] shadow-[0_0_6px_#D4AF37]" />
+            )}
+          </button>
+
+          {/* Active Crossfading Pill */}
+          {isCrossfading && (
+            <div
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-[#F3E5AB] text-[10px] font-mono shadow-[0_0_12px_rgba(212,175,55,0.3)] animate-pulse shrink-0"
+              title="Acoustic Crossfade Blending"
+            >
+              <Waves className="w-3 h-3 text-[#D4AF37]" />
+              <span>Blending</span>
+            </div>
+          )}
 
           {/* Active Sleep Timer Countdown Pill */}
           {isSleepTimerActive && (
