@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { X, Command, Sparkles, Keyboard } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
+import { useEqualizerStore } from "@/store/equalizer-store";
 
 interface ShortcutItem {
   key: string;
@@ -27,6 +28,7 @@ const SHORTCUT_GROUPS: { group: string; shortcuts: ShortcutItem[] }[] = [
       { key: "M", label: "M", action: "Mute / Unmute" },
       { key: "L", label: "L", action: "Synced Lyrics" },
       { key: "V", label: "V", action: "Spectrum Visualizer" },
+      { key: "E", label: "E", action: "Acoustic Equalizer" },
       { key: "Q", label: "Q", action: "Up Next Queue" },
       { key: "S", label: "S", action: "Toggle Shuffle" },
       { key: "R", label: "R", action: "Cycle Repeat Mode" },
@@ -61,6 +63,7 @@ export function KeyboardShortcutsModal() {
     toggleRepeat,
     setIsQueueOpen,
   } = usePlayerStore();
+  const { toggleEqualizer } = useEqualizerStore();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -154,6 +157,12 @@ export function KeyboardShortcutsModal() {
           toggleVisualizer();
           break;
 
+        case "e":
+        case "E":
+          e.preventDefault();
+          toggleEqualizer();
+          break;
+
         case "q":
         case "Q":
           e.preventDefault();
@@ -208,6 +217,7 @@ export function KeyboardShortcutsModal() {
     toggleLyrics,
     toggleQueue,
     toggleVisualizer,
+    toggleEqualizer,
     toggleShuffle,
     toggleRepeat,
   ]);

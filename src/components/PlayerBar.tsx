@@ -16,10 +16,12 @@ import {
   MoreHorizontal,
   ListMusic,
   Activity,
+  Sliders,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { usePlaylistStore } from "@/store/playlist-store";
 import { useContextMenuStore } from "@/store/context-menu-store";
+import { useEqualizerStore } from "@/store/equalizer-store";
 import type { YTPlayerInstance } from "@/types/youtube-iframe";
 import { getHighResThumbnail, handleImageError } from "@/lib/image";
 
@@ -69,6 +71,11 @@ export function PlayerBar() {
     toggleVisualizer,
   } = usePlayerStore();
   const { openContextMenu } = useContextMenuStore();
+  const {
+    isOpen: isEqualizerOpen,
+    toggleEqualizer,
+    isEnabled: isEqualizerEnabled,
+  } = useEqualizerStore();
 
   const isLiked = currentTrack ? likedTrackIds.includes(currentTrack.id) : false;
   const currentTime = progress;
@@ -734,6 +741,21 @@ export function PlayerBar() {
             title="Spectrum Visualizer (V)"
           >
             <Activity className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={toggleEqualizer}
+            className={`p-1.5 rounded-lg transition relative ${
+              isEqualizerOpen
+                ? "text-aether-gold bg-aether-gold-glow border border-aether-gold/30"
+                : "text-aether-muted hover:text-white"
+            }`}
+            title="Acoustic Equalizer (E)"
+          >
+            <Sliders className="w-4 h-4" />
+            {isEqualizerEnabled && (
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#D4AF37] shadow-[0_0_6px_#D4AF37]" />
+            )}
           </button>
 
           <button
