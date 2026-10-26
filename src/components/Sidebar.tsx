@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ import {
   UploadCloud,
   Disc,
   Keyboard,
+  CloudUpload,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { useAuthStore } from "@/store/auth-store";
@@ -31,7 +32,11 @@ export function Sidebar() {
     fetchPlaylists,
     syncStatus,
     startBackgroundSync,
+    syncAllLocalPlaylistsToCloud,
   } = usePlaylistStore();
+
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const hasLocalPlaylists = playlists.some((p) => p.id.startsWith("local-pl-"));
 
   useEffect(() => {
     initAuth();
@@ -176,20 +181,54 @@ export function Sidebar() {
               </div>
             ) : (
               <>
-                {playlists.map((pl) => (
-                  <Link
-                    key={pl.id}
-                    href={`/playlist/${pl.id}`}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs truncate transition ${
-                      pathname === `/playlist/${pl.id}`
-                        ? "text-aether-gold bg-aether-gold-glow/40 border border-aether-gold/20"
-                        : "text-aether-subdued hover:text-white hover:bg-aether-elevated/50"
-                    }`}
+                {playlists.map((pl) => {
+                  const isLocal = pl.id.startsWith("local-pl-");
+                  return (
+                    <Link
+                      key={pl.id}
+                      href={`/playlist/${pl.id}`}
+                      className={`group flex items-center justify-between px-3 py-2 rounded-xl text-xs truncate transition ${
+                        pathname === `/playlist/${pl.id}`
+                          ? "text-aether-gold bg-aether-gold-glow/40 border border-aether-gold/20"
+                          : "text-aether-subdued hover:text-white hover:bg-aether-elevated/50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <ListMusic className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{pl.name}</span>
+                      </div>
+                      {isLocal && (
+                        <span
+                          className="w-1.5 h-1.5 rounded-full bg-amber-400/70 shrink-0 group-hover:scale-125 transition"
+                          title="Local Vault collection"
+                        />
+                      )}
+                    </Link>
+                  );
+                })}
+
+                {user && hasLocalPlaylists && (
+                  <button
+                    onClick={async () => {
+                      setIsSyncingAll(true);
+                      await syncAllLocalPlaylistsToCloud();
+                      setIsSyncingAll(false);
+                    }}
+                    disabled={isSyncingAll}
+                    className="w-full mt-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-mono transition"
+                    title="Upload all local playlists to Supabase Cloud"
                   >
-                    <ListMusic className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">{pl.name}</span>
-                  </Link>
-                ))}
+                    <CloudUpload
+                      className={`w-3 h-3 ${isSyncingAll ? "animate-bounce" : ""}`}
+                    />
+                    <span>
+                      {isSyncingAll
+                        ? "Syncing Vault..."
+                        : "Sync Vault to Cloud"}
+                    </span>
+                  </button>
+                )}
+
                 <div className="pt-1.5 flex items-center gap-1 border-t border-aether-border/20 mt-1">
                   <button
                     onClick={() => openCreateModal("create")}

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Play, Bookmark, MoreHorizontal } from "lucide-react";
+import { Play, Bookmark, MoreHorizontal, ChevronUp, ChevronDown, Trash2 } from "lucide-react";
 import { Track } from "@/types/music";
 import { usePlayerStore } from "@/store/player-store";
 import { useContextMenuStore } from "@/store/context-menu-store";
@@ -11,9 +11,19 @@ interface TrackRowProps {
   track: Track;
   index: number;
   tracksContext?: Track[];
+  onRemove?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
-export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
+export function TrackRow({
+  track,
+  index,
+  tracksContext,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+}: TrackRowProps) {
   const {
     currentTrack,
     isPlaying,
@@ -106,8 +116,43 @@ export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
         {track.album || "Single"}
       </div>
 
-      {/* Right: Save to Vault & Duration */}
-      <div className="flex items-center gap-3.5 shrink-0 text-aether-subdued text-[11px] font-mono tabular-nums">
+      {/* Right: Actions & Duration */}
+      <div className="flex items-center gap-2.5 md:gap-3 shrink-0 text-aether-subdued text-[11px] font-mono tabular-nums">
+        {(onMoveUp !== undefined || onMoveDown !== undefined) && (
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition mr-1">
+            <button
+              disabled={!onMoveUp}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp?.();
+              }}
+              className={`p-1 rounded hover:bg-white/10 transition ${
+                onMoveUp
+                  ? "text-zinc-400 hover:text-[#D4AF37]"
+                  : "text-zinc-600 opacity-25 cursor-not-allowed"
+              }`}
+              title="Move up"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              disabled={!onMoveDown}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown?.();
+              }}
+              className={`p-1 rounded hover:bg-white/10 transition ${
+                onMoveDown
+                  ? "text-zinc-400 hover:text-[#D4AF37]"
+                  : "text-zinc-600 opacity-25 cursor-not-allowed"
+              }`}
+              title="Move down"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -124,6 +169,20 @@ export function TrackRow({ track, index, tracksContext }: TrackRowProps) {
             className={`w-3.5 h-3.5 ${isLiked ? "fill-aether-gold" : ""}`}
           />
         </button>
+
+        {onRemove && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover:opacity-100"
+            title="Remove from collection"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         <span className="w-10 text-right">{track.durationFormatted}</span>
         <button
           onClick={(e) => {

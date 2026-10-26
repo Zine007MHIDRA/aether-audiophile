@@ -12,8 +12,12 @@ import {
   Loader2,
   Disc,
   ArrowRight,
+  Palette,
+  Check,
+  Music2,
+  Search,
 } from "lucide-react";
-import { usePlaylistStore } from "@/store/playlist-store";
+import { usePlaylistStore, PLAYLIST_GRADIENT_PRESETS } from "@/store/playlist-store";
 import { useRouter } from "next/navigation";
 import { Track } from "@/types/music";
 
@@ -45,6 +49,12 @@ export function CreatePlaylistModal() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [blankLoading, setBlankLoading] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState("gold");
+  const [customCover, setCustomCover] = useState("");
+  const [seedQuery, setSeedQuery] = useState("");
+  const [seedResults, setSeedResults] = useState<Track[]>([]);
+  const [seedTracks, setSeedTracks] = useState<Track[]>([]);
+  const [isSearchingSeeds, setIsSearchingSeeds] = useState(false);
 
   // Import URL states
   const [urlInput, setUrlInput] = useState("");
@@ -82,9 +92,33 @@ export function CreatePlaylistModal() {
       setTextInput("");
       setTextPlaylistName("");
       setFilePlaylistName("");
+      setCustomCover("");
+      setSelectedPreset("gold");
+      setSeedTracks([]);
+      setSeedQuery("");
+      setSeedResults([]);
       cancelRef.current = false;
     }
   }, [isCreateModalOpen, initialTab]);
+
+  const searchSeedTracks = async (query: string) => {
+    if (!query.trim()) {
+      setSeedResults([]);
+      return;
+    }
+    setIsSearchingSeeds(true);
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSeedResults((data.tracks || []).slice(0, 4));
+      }
+    } catch {
+      // silent
+    } finally {
+      setIsSearchingSeeds(false);
+    }
+  };
 
   if (!isCreateModalOpen) return null;
 
@@ -341,12 +375,22 @@ export function CreatePlaylistModal() {
     if (!name.trim()) return;
 
     setBlankLoading(true);
-    const created = await createPlaylist(name.trim(), description.trim());
+    const cover = customCover.trim() || `preset:${selectedPreset}`;
+    const created = await createPlaylist(
+      name.trim(),
+      description.trim(),
+      cover,
+      seedTracks
+    );
     setBlankLoading(false);
 
     if (created) {
       setName("");
       setDescription("");
+      setCustomCover("");
+      setSeedTracks([]);
+      setSeedQuery("");
+      setSeedResults([]);
       closeCreateModal();
       router.push(`/playlist/${created.id}`);
     }
@@ -636,7 +680,7 @@ export function CreatePlaylistModal() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Late Night Nocturne"
-                className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-3 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition"
+                className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-2.5 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition"
               />
             </div>
 
@@ -645,12 +689,161 @@ export function CreatePlaylistModal() {
                 Description (Optional)
               </label>
               <textarea
-                rows={3}
+                rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Atmospheric soundscapes for focus and nocturnal sessions..."
-                className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-2.5 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition resize-none"
+                className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs px-3.5 py-2 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition resize-none"
               />
+            </div>
+
+            {/* Artwork Theme Selection */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
+                <span className="flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-[#D4AF37]" />
+                  <span>Artwork Theme</span>
+                </span>
+                <span className="text-zinc-500">6 Luxury Presets</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {PLAYLIST_GRADIENT_PRESETS.map((preset) => {
+                  const isSelected =
+                    !customCover && selectedPreset === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPreset(preset.id);
+                        setCustomCover("");
+                      }}
+                      className={`flex items-center gap-2 p-2 rounded-xl border text-left transition ${
+                        isSelected
+                          ? "border-[#D4AF37] bg-white/5 shadow-[0_0_12px_rgba(212,175,55,0.2)]"
+                          : "border-aether-border/50 hover:border-zinc-500 bg-aether-dark/60"
+                      }`}
+                    >
+                      <div
+                        className={`w-5 h-5 rounded-lg shrink-0 bg-gradient-to-br ${preset.css} border border-white/20 flex items-center justify-center`}
+                      >
+                        {isSelected && (
+                          <Check className="w-3 h-3 text-white drop-shadow" />
+                        )}
+                      </div>
+                      <span className="text-[11px] font-medium text-zinc-300 truncate">
+                        {preset.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom Image URL fallback */}
+              <input
+                type="url"
+                value={customCover}
+                onChange={(e) => setCustomCover(e.target.value)}
+                placeholder="Or paste custom cover image URL (https://...)"
+                className="w-full bg-aether-dark/60 border border-aether-border/50 rounded-xl text-white text-[11px] px-3 py-2 placeholder-zinc-600 focus:outline-none focus:border-aether-gold transition mt-1"
+              />
+            </div>
+
+            {/* Seed Compositions Search */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
+                <span className="flex items-center gap-1.5">
+                  <Music2 className="w-3.5 h-3.5 text-[#D4AF37]" />
+                  <span>Seed Tracks (Optional)</span>
+                </span>
+                {seedTracks.length > 0 && (
+                  <span className="text-aether-gold font-bold">
+                    {seedTracks.length} selected
+                  </span>
+                )}
+              </div>
+
+              {/* Selected Seed Pills */}
+              {seedTracks.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 p-2 bg-aether-dark/60 rounded-xl border border-aether-border/40">
+                  {seedTracks.map((t) => (
+                    <span
+                      key={t.id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-[#F3E5AB] text-[11px]"
+                    >
+                      <span className="truncate max-w-[150px]">{t.title}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSeedTracks((prev) =>
+                            prev.filter((item) => item.id !== t.id)
+                          )
+                        }
+                        className="hover:text-red-400 text-zinc-400 font-bold"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Search bar */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-3 pointer-events-none" />
+                <input
+                  type="text"
+                  value={seedQuery}
+                  onChange={(e) => {
+                    setSeedQuery(e.target.value);
+                    searchSeedTracks(e.target.value);
+                  }}
+                  placeholder="Search catalog to add initial tracks..."
+                  className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs pl-8 pr-3 py-2.5 placeholder-aether-muted focus:outline-none focus:border-aether-gold transition"
+                />
+              </div>
+
+              {/* Quick Results */}
+              {seedResults.length > 0 && (
+                <div className="flex flex-col gap-1 bg-aether-dark/90 border border-aether-border/60 rounded-xl p-1.5 max-h-36 overflow-y-auto">
+                  {seedResults.map((track) => {
+                    const alreadyAdded = seedTracks.some(
+                      (t) => t.id === track.id
+                    );
+                    return (
+                      <div
+                        key={track.id}
+                        className="flex items-center justify-between p-1.5 rounded-lg hover:bg-white/5 transition"
+                      >
+                        <div className="flex flex-col min-w-0 pr-2">
+                          <span className="text-white text-xs truncate">
+                            {track.title}
+                          </span>
+                          <span className="text-zinc-500 text-[10px] truncate">
+                            {track.artist}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={alreadyAdded}
+                          onClick={() => {
+                            setSeedTracks((prev) => [...prev, track]);
+                            setSeedQuery("");
+                            setSeedResults([]);
+                          }}
+                          className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition ${
+                            alreadyAdded
+                              ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                              : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black"
+                          }`}
+                        >
+                          {alreadyAdded ? "Added" : "+ Add"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <button
@@ -659,11 +852,15 @@ export function CreatePlaylistModal() {
               className="flex items-center justify-center gap-2 w-full mt-2 bg-gradient-to-r from-aether-gold-hover via-aether-gold to-aether-gold-muted text-black font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-gold-glow hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
             >
               {blankLoading ? (
-                <span className="animate-pulse">Creating...</span>
+                <span className="animate-pulse">Creating Collection...</span>
               ) : (
                 <>
                   <Plus className="w-4 h-4 text-black" />
-                  <span>Create Playlist</span>
+                  <span>
+                    {seedTracks.length > 0
+                      ? `Create Playlist with ${seedTracks.length} Track${seedTracks.length === 1 ? "" : "s"}`
+                      : "Create Playlist"}
+                  </span>
                 </>
               )}
             </button>
