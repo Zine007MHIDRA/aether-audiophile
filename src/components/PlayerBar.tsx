@@ -14,6 +14,7 @@ import {
   Mic2,
   AlertCircle,
   MoreHorizontal,
+  ListMusic,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { usePlaylistStore } from "@/store/playlist-store";
@@ -48,6 +49,8 @@ export function PlayerBar() {
     isShuffle,
     likedTrackIds,
     isLyricsOpen,
+    isQueueOpen,
+    queue,
     togglePlay,
     setIsPlaying,
     nextTrack,
@@ -60,6 +63,7 @@ export function PlayerBar() {
     toggleShuffle,
     toggleLike,
     toggleLyrics,
+    toggleQueue,
   } = usePlayerStore();
   const { openContextMenu } = useContextMenuStore();
 
@@ -712,9 +716,26 @@ export function PlayerBar() {
                 ? "text-aether-gold bg-aether-gold-glow border border-aether-gold/30"
                 : "text-aether-muted hover:text-white"
             }`}
-            title="Synced Lyrics"
+            title="Synced Lyrics (L)"
           >
             <Mic2 className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={toggleQueue}
+            className={`p-1.5 rounded-lg transition relative ${
+              isQueueOpen
+                ? "text-aether-gold bg-aether-gold-glow border border-aether-gold/30"
+                : "text-aether-muted hover:text-white"
+            }`}
+            title="Up Next Queue (Q)"
+          >
+            <ListMusic className="w-4 h-4" />
+            {queue.length > 1 && (
+              <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-0.5 rounded-full bg-[#D4AF37] text-black text-[9px] font-bold font-mono flex items-center justify-center">
+                {Math.min(queue.length - 1, 99)}
+              </span>
+            )}
           </button>
 
           {/* Volume slider (desktop only, phones have physical rockers) */}

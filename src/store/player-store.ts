@@ -17,6 +17,7 @@ interface PlayerState {
   likedTracks: Track[];
   likedTrackIds: string[];
   isLyricsOpen: boolean;
+  isQueueOpen: boolean;
 
   // Actions
   playTrack: (track: Track, newQueue?: Track[]) => void;
@@ -32,8 +33,14 @@ interface PlayerState {
   toggleShuffle: () => void;
   toggleLike: (track: Track) => void;
   toggleLyrics: () => void;
+  toggleQueue: () => void;
+  setIsQueueOpen: (open: boolean) => void;
   addToQueue: (track: Track) => void;
   playNext: (track: Track) => void;
+  removeFromQueue: (index: number) => void;
+  clearUpcomingQueue: () => void;
+  moveQueueItem: (fromIndex: number, toIndex: number) => void;
+  jumpToQueueIndex: (index: number) => void;
   resolveTrack: (oldId: string, updatedTrack: Partial<Track>) => void;
 }
 
@@ -53,6 +60,7 @@ export const usePlayerStore = create<PlayerState>()(
       likedTracks: [],
       likedTrackIds: [],
       isLyricsOpen: false,
+      isQueueOpen: false,
 
       playTrack: (track, newQueue) => {
         let queue = newQueue ? [...newQueue] : [...get().queue];
@@ -167,6 +175,8 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       toggleLyrics: () => set((state) => ({ isLyricsOpen: !state.isLyricsOpen })),
+      toggleQueue: () => set((state) => ({ isQueueOpen: !state.isQueueOpen })),
+      setIsQueueOpen: (open) => set({ isQueueOpen: open }),
 
       addToQueue: (track) => {
         const { queue } = get();
@@ -188,6 +198,82 @@ export const usePlayerStore = create<PlayerState>()(
         const newQueue = [...queue];
         newQueue.splice(queueIndex + 1, 0, track);
         set({ queue: newQueue });
+      },
+
+      removeFromQueue: (index) => {
+        const { queue, queueIndex } = get();
+        if (index < 0 || index >= queue.length) return;
+        const newQueue = queue.filter((_, i) => i !== index);
+        let newIndex = queueIndex;
+        if (index < queueIndex) {
+          newIndex = queueIndex - 1;
+        } else if (index === queueIndex) {
+          if (newQueue.length === 0) {
+            set({ currentTrack: null, queue: [], queueIndex: -1, isPlaying: false });
+            return;
+          }
+          const nextTrack = newQueue[Math.min(queueIndex, newQueue.length - 1)];
+          set({
+            currentTrack: nextTrack,
+            queue: newQueue,
+            queueIndex: Math.min(queueIndex, newQueue.length - 1),
+            progress: 0,
+            duration: nextTrack.duration || 0,
+          });
+          return;
+        }
+        set({ queue: newQueue, queueIndex: newIndex });
+      },
+
+      clearUpcomingQueue: () => {
+        const { queue, queueIndex, currentTrack } = get();
+        if (!currentTrack || queueIndex === -1) {
+          set({ queue: [], queueIndex: -1 });
+          return;
+        }
+        const newQueue = queue.slice(0, queueIndex + 1);
+        set({ queue: newQueue });
+      },
+
+      moveQueueItem: (fromIndex, toIndex) => {
+        const { queue, queueIndex } = get();
+        if (
+          fromIndex < 0 ||
+          fromIndex >= queue.length ||
+          toIndex < 0 ||
+          toIndex >= queue.length ||
+          fromIndex === toIndex
+        ) {
+          return;
+        }
+        const newQueue = [...queue];
+        const [movedTrack] = newQueue.splice(fromIndex, 1);
+        newQueue.splice(toIndex, 0, movedTrack);
+
+        let newQueueIndex = queueIndex;
+        if (queueIndex === fromIndex) {
+          newQueueIndex = toIndex;
+        } else if (fromIndex < queueIndex && toIndex >= queueIndex) {
+          newQueueIndex = queueIndex - 1;
+        } else if (fromIndex > queueIndex && toIndex <= queueIndex) {
+          newQueueIndex = queueIndex + 1;
+        }
+
+        set({ queue: newQueue, queueIndex: newQueueIndex });
+      },
+
+      jumpToQueueIndex: (index) => {
+        const { queue } = get();
+        if (index >= 0 && index < queue.length) {
+          const track = queue[index];
+          set({
+            currentTrack: track,
+            queueIndex: index,
+            isPlaying: true,
+            progress: 0,
+            duration: track.duration || 0,
+          });
+        }
       },
 
       resolveTrack: (oldId, updatedTrack) => {

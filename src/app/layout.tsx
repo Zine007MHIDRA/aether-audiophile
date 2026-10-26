@@ -8,6 +8,8 @@ import { AuthModal } from "@/components/AuthModal";
 import { CreatePlaylistModal } from "@/components/CreatePlaylistModal";
 import { AuthInitializer } from "@/components/AuthInitializer";
 import { TrackContextMenu } from "@/components/TrackContextMenu";
+import { QueueDrawer } from "@/components/QueueDrawer";
+import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
 
 export const metadata: Metadata = {
   title: "Aether — Audiophile Music",
@@ -64,6 +66,8 @@ export default function RootLayout({
         <AuthModal />
         <CreatePlaylistModal />
         <TrackContextMenu />
+        <QueueDrawer />
+        <KeyboardShortcutsModal />
       </body>
     </html>
   );

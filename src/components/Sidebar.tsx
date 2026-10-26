@@ -14,6 +14,7 @@ import {
   LogIn,
   UploadCloud,
   Disc,
+  Keyboard,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { useAuthStore } from "@/store/auth-store";
@@ -247,6 +248,20 @@ export function Sidebar() {
             <span>Sign In / Join</span>
           </button>
         )}
+
+        <button
+          onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}
+          className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-lg text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition mt-2"
+          title="View Keyboard Shortcuts (?)"
+        >
+          <span className="flex items-center gap-2">
+            <Keyboard className="w-3.5 h-3.5 text-[#D4AF37]" />
+            <span>Hotkeys</span>
+          </span>
+          <kbd className="px-1.5 py-0.5 rounded bg-zinc-900 border border-white/10 font-mono text-[9px] text-[#F3E5AB]">
+            ?
+          </kbd>
+        </button>
       </div>
     </aside>
   );
