@@ -18,6 +18,8 @@ interface PlayerState {
   likedTrackIds: string[];
   isLyricsOpen: boolean;
   isQueueOpen: boolean;
+  isVisualizerOpen: boolean;
+  visualizerMode: "bars" | "wave" | "radial";
 
   // Actions
   playTrack: (track: Track, newQueue?: Track[]) => void;
@@ -35,6 +37,8 @@ interface PlayerState {
   toggleLyrics: () => void;
   toggleQueue: () => void;
   setIsQueueOpen: (open: boolean) => void;
+  toggleVisualizer: () => void;
+  setVisualizerMode: (mode: "bars" | "wave" | "radial") => void;
   addToQueue: (track: Track) => void;
   playNext: (track: Track) => void;
   removeFromQueue: (index: number) => void;
@@ -61,6 +65,8 @@ export const usePlayerStore = create<PlayerState>()(
       likedTrackIds: [],
       isLyricsOpen: false,
       isQueueOpen: false,
+      isVisualizerOpen: false,
+      visualizerMode: "bars",
 
       playTrack: (track, newQueue) => {
         let queue = newQueue ? [...newQueue] : [...get().queue];
@@ -177,6 +183,8 @@ export const usePlayerStore = create<PlayerState>()(
       toggleLyrics: () => set((state) => ({ isLyricsOpen: !state.isLyricsOpen })),
       toggleQueue: () => set((state) => ({ isQueueOpen: !state.isQueueOpen })),
       setIsQueueOpen: (open) => set({ isQueueOpen: open }),
+      toggleVisualizer: () => set((state) => ({ isVisualizerOpen: !state.isVisualizerOpen })),
+      setVisualizerMode: (mode) => set({ visualizerMode: mode }),
 
       addToQueue: (track) => {
         const { queue } = get();
@@ -309,6 +317,7 @@ export const usePlayerStore = create<PlayerState>()(
         likedTrackIds: state.likedTrackIds,
         repeatMode: state.repeatMode,
         isShuffle: state.isShuffle,
+        visualizerMode: state.visualizerMode,
       }),
     }
   )

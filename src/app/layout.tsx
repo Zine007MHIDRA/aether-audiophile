@@ -10,6 +10,7 @@ import { AuthInitializer } from "@/components/AuthInitializer";
 import { TrackContextMenu } from "@/components/TrackContextMenu";
 import { QueueDrawer } from "@/components/QueueDrawer";
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
+import { AudioVisualizerModal } from "@/components/AudioVisualizerModal";
 
 export const metadata: Metadata = {
   title: "Aether — Audiophile Music",
@@ -68,6 +69,7 @@ export default function RootLayout({
         <TrackContextMenu />
         <QueueDrawer />
         <KeyboardShortcutsModal />
+        <AudioVisualizerModal />
       </body>
     </html>
   );

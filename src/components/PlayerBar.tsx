@@ -15,6 +15,7 @@ import {
   AlertCircle,
   MoreHorizontal,
   ListMusic,
+  Activity,
 } from "lucide-react";
 import { usePlayerStore } from "@/store/player-store";
 import { usePlaylistStore } from "@/store/playlist-store";
@@ -64,6 +65,8 @@ export function PlayerBar() {
     toggleLike,
     toggleLyrics,
     toggleQueue,
+    isVisualizerOpen,
+    toggleVisualizer,
   } = usePlayerStore();
   const { openContextMenu } = useContextMenuStore();
 
@@ -719,6 +722,18 @@ export function PlayerBar() {
             title="Synced Lyrics (L)"
           >
             <Mic2 className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={toggleVisualizer}
+            className={`p-1.5 rounded-lg transition ${
+              isVisualizerOpen
+                ? "text-aether-gold bg-aether-gold-glow border border-aether-gold/30"
+                : "text-aether-muted hover:text-white"
+            }`}
+            title="Spectrum Visualizer (V)"
+          >
+            <Activity className="w-4 h-4" />
           </button>
 
           <button

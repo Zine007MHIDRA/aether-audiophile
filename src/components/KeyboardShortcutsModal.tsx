@@ -26,6 +26,7 @@ const SHORTCUT_GROUPS: { group: string; shortcuts: ShortcutItem[] }[] = [
     shortcuts: [
       { key: "M", label: "M", action: "Mute / Unmute" },
       { key: "L", label: "L", action: "Synced Lyrics" },
+      { key: "V", label: "V", action: "Spectrum Visualizer" },
       { key: "Q", label: "Q", action: "Up Next Queue" },
       { key: "S", label: "S", action: "Toggle Shuffle" },
       { key: "R", label: "R", action: "Cycle Repeat Mode" },
@@ -55,6 +56,7 @@ export function KeyboardShortcutsModal() {
     toggleMute,
     toggleLyrics,
     toggleQueue,
+    toggleVisualizer,
     toggleShuffle,
     toggleRepeat,
     setIsQueueOpen,
@@ -146,6 +148,12 @@ export function KeyboardShortcutsModal() {
           toggleLyrics();
           break;
 
+        case "v":
+        case "V":
+          e.preventDefault();
+          toggleVisualizer();
+          break;
+
         case "q":
         case "Q":
           e.preventDefault();
@@ -199,6 +207,7 @@ export function KeyboardShortcutsModal() {
     toggleMute,
     toggleLyrics,
     toggleQueue,
+    toggleVisualizer,
     toggleShuffle,
     toggleRepeat,
   ]);
