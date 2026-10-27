@@ -576,7 +576,26 @@ export function PlayerBar() {
         }
       }
     });
-  }, [currentTrack, nextTrack, prevTrack, setIsPlaying, setProgress]);
+
+    // Native Electron desktop media key & tray dispatcher
+    const w = typeof window !== "undefined" ? (window as any) : null;
+    if (w?.electronAPI?.onMediaKey) {
+      w.electronAPI.onMediaKey((action: string) => {
+        if (action === "playpause") {
+          const nextPlaying = !isPlaying;
+          setIsPlaying(nextPlaying);
+          if (isPlayerReadyRef.current && playerRef.current) {
+            if (nextPlaying) playerRef.current.playVideo?.();
+            else playerRef.current.pauseVideo?.();
+          }
+        } else if (action === "next") {
+          nextTrack();
+        } else if (action === "previous") {
+          prevTrack();
+        }
+      });
+    }
+  }, [currentTrack, isPlaying, nextTrack, prevTrack, setIsPlaying, setProgress]);
 
   // 6. Direct user gesture play/pause toggle (guarantees browser autoplay approval)
   const handleTogglePlay = () => {
