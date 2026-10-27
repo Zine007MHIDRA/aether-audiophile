@@ -10,7 +10,9 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get("code");
   const token_hash = requestUrl.searchParams.get("token_hash");
   const type = requestUrl.searchParams.get("type") as any;
-  const next = requestUrl.searchParams.get("next") ?? "/";
+  const rawNext = requestUrl.searchParams.get("next");
+  const defaultNext = type === "recovery" ? "/?reset=true" : "/";
+  const next = rawNext ?? defaultNext;
 
   const targetUrl = new URL(next.startsWith("/") ? next : "/", requestUrl.origin);
 

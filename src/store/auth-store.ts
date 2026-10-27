@@ -7,9 +7,11 @@ interface AuthState {
   session: Session | null;
   isLoading: boolean;
   isAuthModalOpen: boolean;
+  isPasswordRecovery: boolean;
 
   openAuthModal: () => void;
   closeAuthModal: () => void;
+  setIsPasswordRecovery: (isRecovery: boolean) => void;
   setUser: (user: User | null) => void;
   setSession: (session: Session | null) => void;
   signInWithEmail: (
@@ -28,6 +30,12 @@ interface AuthState {
   resendConfirmationEmail: (
     email: string
   ) => Promise<{ error?: string; message?: string }>;
+  sendPasswordResetEmail: (
+    email: string
+  ) => Promise<{ error?: string; message?: string }>;
+  updatePassword: (
+    newPassword: string
+  ) => Promise<{ error?: string; message?: string }>;
   signOut: () => Promise<void>;
   initAuth: () => void;
 }
@@ -37,9 +45,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   isLoading: true,
   isAuthModalOpen: false,
+  isPasswordRecovery: false,
 
   openAuthModal: () => set({ isAuthModalOpen: true }),
   closeAuthModal: () => set({ isAuthModalOpen: false }),
+  setIsPasswordRecovery: (isRecovery) => set({ isPasswordRecovery: isRecovery }),
   setUser: (user) => set({ user }),
   setSession: (session) => set({ session }),
 
@@ -68,6 +78,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
         set({ session, user: session?.user || null, isLoading: false });
+        if (_event === "PASSWORD_RECOVERY") {
+          set({ isPasswordRecovery: true, isAuthModalOpen: true });
+        }
         if (session?.user && typeof window !== "undefined") {
           import("@/store/playlist-store").then(({ usePlaylistStore }) => {
             usePlaylistStore.getState().fetchPlaylists();
@@ -276,6 +289,78 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     return { message: "Confirmation email resent! Please check your inbox." };
+  },
+
+  sendPasswordResetEmail: async (email: string) => {
+    if (!isSupabaseConfigured()) {
+      return { error: "Supabase authentication is not configured." };
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const isBlockedDomain =
+      cleanEmail.endsWith("@example.com") || cleanEmail.endsWith("@test.com");
+    if (isBlockedDomain) {
+      return {
+        error:
+          "Please use a real email domain (e.g. @gmail.com or @mailinator.com) — Supabase blocks @example.com",
+      };
+    }
+
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/auth/callback?next=/?reset=true`
+        : undefined;
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo,
+    });
+
+    if (error) {
+      const msg = error.message;
+      if (
+        msg.toLowerCase().includes("rate limit") ||
+        (error as any).status === 429
+      ) {
+        return {
+          error:
+            "Email rate limit exceeded (Supabase limits password reset emails). Please wait a few minutes.",
+        };
+      }
+      return { error: msg };
+    }
+
+    return {
+      message: "Password reset link sent! Please check your email inbox.",
+    };
+  },
+
+  updatePassword: async (newPassword: string) => {
+    if (!isSupabaseConfigured()) {
+      return { error: "Supabase authentication is not configured." };
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      return { error: "Password must be at least 6 characters long." };
+    }
+
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    if (data.user) {
+      set({
+        user: data.user,
+        isPasswordRecovery: false,
+      });
+    }
+
+    return { message: "Master password successfully updated! Welcome back." };
   },
 
   signOut: async () => {
