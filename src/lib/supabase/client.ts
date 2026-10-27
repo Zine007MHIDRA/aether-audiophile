@@ -13,7 +13,9 @@ let browserClient: SupabaseClient | null = null;
  */
 function cleanEnvValue(value: string | undefined): string {
   if (!value) return "";
-  return value.trim().replace(/^["']+|["']+$/g, "").trim();
+  const cleaned = value.trim().replace(/^["']+|["']+$/g, "").trim();
+  if (cleaned === "undefined" || cleaned === "null") return "";
+  return cleaned;
 }
 
 /**
@@ -24,8 +26,15 @@ export function getSupabaseCredentials(): { url: string; anonKey: string } {
   const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const url = cleanEnvValue(rawUrl) || FALLBACK_SUPABASE_URL;
+  let url = cleanEnvValue(rawUrl);
+  if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
+    url = url && url.includes("supabase.co") ? `https://${url}` : FALLBACK_SUPABASE_URL;
+  }
+
   let anonKey = cleanEnvValue(rawKey) || FALLBACK_SUPABASE_KEY;
+  if (anonKey === "undefined" || anonKey === "null" || anonKey.length < 10) {
+    anonKey = FALLBACK_SUPABASE_KEY;
+  }
 
   // Auto-correct casing typo if present in env or fallback (ESuYLcw -> ESUyLcw)
   if (anonKey.includes("ESuYLcw")) {

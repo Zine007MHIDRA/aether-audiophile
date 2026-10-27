@@ -175,6 +175,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (error) {
       const msg = error.message;
       if (
+        msg.toLowerCase().includes("already registered") ||
+        msg.toLowerCase().includes("already in use") ||
+        msg.toLowerCase().includes("user_already_exists") ||
+        (error as any).code === "user_already_exists"
+      ) {
+        return {
+          error:
+            "An account with this email already exists. Please switch to Sign In.",
+          alreadyRegistered: true,
+        };
+      }
+      if (
         msg.toLowerCase().includes("rate limit") ||
         (error as any).status === 429
       ) {
