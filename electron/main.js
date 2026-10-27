@@ -11,6 +11,13 @@ const path = require("path");
 const http = require("http");
 const fs = require("fs");
 
+// Crucial audio & media switches for Chromium
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+app.commandLine.appendSwitch("disable-features", "PreloadMediaEngagementData,MediaEngagementBypassAutoplayPolicies");
+
+const CHROME_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 let mainWindow = null;
 let tray = null;
 let nextServer = null;
@@ -252,9 +259,11 @@ async function createWindow() {
       nodeIntegration: false,
       backgroundThrottling: false,
       spellcheck: false,
+      webSecurity: false,
     },
   });
 
+  mainWindow.webContents.setUserAgent(CHROME_USER_AGENT);
   mainWindow.setMenuBarVisibility(false);
 
   // Load luxury connecting screen immediately so the user NEVER sees a raw black window
@@ -368,6 +377,32 @@ ipcMain.on("window-close", () => {
 });
 
 app.whenReady().then(async () => {
+  const { session } = require("electron");
+
+  // Allow YouTube embeds by spoofing native YouTube origin and Referer
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ["*://*.youtube.com/*", "*://*.googlevideo.com/*", "*://*.ytimg.com/*"] },
+    (details, callback) => {
+      details.requestHeaders["User-Agent"] = CHROME_USER_AGENT;
+      details.requestHeaders["Referer"] = "https://www.youtube.com/";
+      details.requestHeaders["Origin"] = "https://www.youtube.com";
+      callback({ cancel: false, requestHeaders: details.requestHeaders });
+    }
+  );
+
+  // Strip restrictive embedding headers (X-Frame-Options & CSP) from YouTube responses
+  session.defaultSession.webRequest.onHeadersReceived(
+    { urls: ["*://*.youtube.com/*", "*://*.googlevideo.com/*"] },
+    (details, callback) => {
+      const responseHeaders = { ...details.responseHeaders };
+      delete responseHeaders["x-frame-options"];
+      delete responseHeaders["X-Frame-Options"];
+      delete responseHeaders["content-security-policy"];
+      delete responseHeaders["Content-Security-Policy"];
+      callback({ cancel: false, responseHeaders });
+    }
+  );
+
   createTray();
   await createWindow();
 

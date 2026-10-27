@@ -58,6 +58,9 @@ function getTrackLoudnessEstimate(track: { id: string; title: string } | null): 
 
 export function PlayerBar() {
   const playerRef = useRef<YTPlayerInstance | null>(null);
+  const nativeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const activeEngineRef = useRef<"yt" | "native">("yt");
+  const playbackWatchdogRef = useRef<NodeJS.Timeout | null>(null);
   const isPlayerReadyRef = useRef<boolean>(false);
   const activeTrackIdRef = useRef<string | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -139,6 +142,57 @@ export function PlayerBar() {
     return Math.min(100, Math.max(0, store.volume * mult * 100));
   };
 
+  // Switches playback to native lossless audio (/api/stream) when YouTube embed is blocked/throttled
+  const switchToNativeAudio = (targetTime?: number) => {
+    const track = usePlayerStore.getState().currentTrack;
+    if (!track || track.id.startsWith("pending:")) return;
+
+    activeEngineRef.current = "native";
+    if (playbackWatchdogRef.current) {
+      clearTimeout(playbackWatchdogRef.current);
+      playbackWatchdogRef.current = null;
+    }
+
+    if (playerRef.current?.pauseVideo) {
+      try {
+        playerRef.current.pauseVideo();
+      } catch {}
+    }
+
+    if (nativeAudioRef.current) {
+      const streamUrl = `/api/stream?id=${encodeURIComponent(track.id)}`;
+      if (!nativeAudioRef.current.src.includes(encodeURIComponent(track.id))) {
+        nativeAudioRef.current.src = streamUrl;
+      }
+      const seekPos =
+        typeof targetTime === "number" ? targetTime : usePlayerStore.getState().progress || 0;
+      if (seekPos > 0) {
+        try {
+          nativeAudioRef.current.currentTime = seekPos;
+        } catch {}
+      }
+
+      const store = usePlayerStore.getState();
+      nativeAudioRef.current.muted = store.isMuted;
+      nativeAudioRef.current.volume = store.isMuted
+        ? 0
+        : Math.min(1, Math.max(0, getEffectiveTargetVolume() / 100));
+
+      const playPromise = nativeAudioRef.current.play();
+      if (playPromise) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+            setHasError(false);
+          })
+          .catch((err) => {
+            console.warn("Native audio play failed:", err);
+            setHasError(true);
+          });
+      }
+    }
+  };
+
   // 1. Initialize YouTube IFrame API and player instance
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -152,8 +206,8 @@ export function PlayerBar() {
 
       try {
         playerRef.current = new window.YT.Player("yt-hidden-player", {
-          height: "0",
-          width: "0",
+          height: "200",
+          width: "200",
           playerVars: {
             autoplay: 1,
             controls: 0,
@@ -162,7 +216,10 @@ export function PlayerBar() {
             modestbranding: 1,
             playsinline: 1,
             rel: 0,
-            origin: window.location.origin,
+            origin:
+              typeof window !== "undefined" && window.location.origin.startsWith("http")
+                ? window.location.origin
+                : "https://www.youtube.com",
           },
           events: {
             onReady: (event) => {
@@ -194,6 +251,14 @@ export function PlayerBar() {
               if (!playerState) return;
 
               if (state === playerState.PLAYING) {
+                if (playbackWatchdogRef.current) {
+                  clearTimeout(playbackWatchdogRef.current);
+                  playbackWatchdogRef.current = null;
+                }
+                activeEngineRef.current = "yt";
+                if (nativeAudioRef.current && !nativeAudioRef.current.paused) {
+                  nativeAudioRef.current.pause();
+                }
                 setIsPlaying(true);
                 setHasError(false);
                 const totalDuration = event.target.getDuration();
@@ -327,22 +392,17 @@ export function PlayerBar() {
             },
             onError: (event) => {
               console.warn(
-                "YouTube Player error:",
+                "YouTube Player error code:",
                 event.data,
                 "Track ID:",
-                activeTrackIdRef.current
+                activeTrackIdRef.current,
+                "-> Falling back to native lossless audio engine"
               );
-              setHasError(true);
-              setIsPlaying(false);
               if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
                 progressIntervalRef.current = null;
               }
-              // Advance to next track after 2 seconds to avoid getting stuck
-              setTimeout(() => {
-                setHasError(false);
-                usePlayerStore.getState().nextTrack();
-              }, 2000);
+              switchToNativeAudio();
             },
           },
         });
@@ -375,6 +435,10 @@ export function PlayerBar() {
     }
 
     return () => {
+      if (playbackWatchdogRef.current) {
+        clearTimeout(playbackWatchdogRef.current);
+        playbackWatchdogRef.current = null;
+      }
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;
@@ -469,7 +533,19 @@ export function PlayerBar() {
 
     activeTrackIdRef.current = currentTrack.id;
 
-    if (isPlayerReadyRef.current && playerRef.current) {
+    if (activeEngineRef.current === "native") {
+      if (nativeAudioRef.current) {
+        nativeAudioRef.current.src = `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
+        nativeAudioRef.current.currentTime = 0;
+        nativeAudioRef.current.muted = isMuted;
+        nativeAudioRef.current.volume = isMuted
+          ? 0
+          : Math.min(1, Math.max(0, getEffectiveTargetVolume() / 100));
+        if (isPlaying) {
+          nativeAudioRef.current.play().catch(console.warn);
+        }
+      }
+    } else if (isPlayerReadyRef.current && playerRef.current) {
       try {
         playerRef.current.loadVideoById(currentTrack.id);
         if (isPlaying) {
@@ -477,13 +553,36 @@ export function PlayerBar() {
         }
       } catch (err) {
         console.warn("Failed to load video on track change:", err);
+        switchToNativeAudio();
       }
+    }
+
+    // Fallback watchdog: If YouTube doesn't start playing within 3.5s, switch to native stream
+    if (isPlaying) {
+      playbackWatchdogRef.current = setTimeout(() => {
+        if (
+          activeEngineRef.current === "yt" &&
+          usePlayerStore.getState().isPlaying &&
+          (!playerRef.current || playerRef.current.getPlayerState?.() !== window.YT?.PlayerState?.PLAYING)
+        ) {
+          console.info("YouTube playback stalled, switching to native audio engine...");
+          switchToNativeAudio();
+        }
+      }, 3500);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack]);
 
   // 3. Sync store isPlaying changes triggered outside user click
   useEffect(() => {
+    if (activeEngineRef.current === "native" && nativeAudioRef.current) {
+      if (isPlaying && nativeAudioRef.current.paused) {
+        nativeAudioRef.current.play().catch(console.warn);
+      } else if (!isPlaying && !nativeAudioRef.current.paused) {
+        nativeAudioRef.current.pause();
+      }
+    }
+
     if (!isPlayerReadyRef.current || !playerRef.current || !currentTrack) return;
     try {
       const state = playerRef.current.getPlayerState?.();
@@ -507,7 +606,6 @@ export function PlayerBar() {
 
   // 4. Volume, mute, and smart loudness dynamic synchronization
   useEffect(() => {
-    if (!isPlayerReadyRef.current || !playerRef.current) return;
     if (useSleepTimerStore.getState().isFadingOut) return;
 
     const dynamics = useAudioDynamicsStore.getState();
@@ -517,17 +615,25 @@ export function PlayerBar() {
       : 0;
     dynamics.setCurrentAppliedTrimDb(trimDb);
 
-    try {
-      if (isMuted) {
-        playerRef.current.mute();
-      } else {
-        playerRef.current.unMute();
-        const mult = dynamics.loudnessNormalizationEnabled ? Math.pow(10, trimDb / 20) : 1;
-        const targetVol = Math.min(100, Math.max(0, volume * mult * 100));
-        playerRef.current.setVolume(targetVol);
+    const mult = dynamics.loudnessNormalizationEnabled ? Math.pow(10, trimDb / 20) : 1;
+    const targetVol = Math.min(100, Math.max(0, volume * mult * 100));
+
+    if (nativeAudioRef.current) {
+      nativeAudioRef.current.muted = isMuted;
+      nativeAudioRef.current.volume = isMuted ? 0 : Math.min(1, Math.max(0, targetVol / 100));
+    }
+
+    if (isPlayerReadyRef.current && playerRef.current) {
+      try {
+        if (isMuted) {
+          playerRef.current.mute();
+        } else {
+          playerRef.current.unMute();
+          playerRef.current.setVolume(targetVol);
+        }
+      } catch (err) {
+        console.warn("Error setting volume on YouTube player:", err);
       }
-    } catch (err) {
-      console.warn("Error setting volume on YouTube player:", err);
     }
   }, [volume, isMuted, currentTrack, targetLUFS, loudnessNormalizationEnabled, preampHeadroom]);
 
@@ -554,6 +660,9 @@ export function PlayerBar() {
 
     navigator.mediaSession.setActionHandler("play", () => {
       setIsPlaying(true);
+      if (activeEngineRef.current === "native" && nativeAudioRef.current) {
+        nativeAudioRef.current.play().catch(console.warn);
+      }
       if (isPlayerReadyRef.current && playerRef.current) {
         playerRef.current.playVideo?.();
       }
@@ -561,6 +670,9 @@ export function PlayerBar() {
 
     navigator.mediaSession.setActionHandler("pause", () => {
       setIsPlaying(false);
+      if (activeEngineRef.current === "native" && nativeAudioRef.current) {
+        nativeAudioRef.current.pause();
+      }
       if (isPlayerReadyRef.current && playerRef.current) {
         playerRef.current.pauseVideo?.();
       }
@@ -571,6 +683,9 @@ export function PlayerBar() {
     navigator.mediaSession.setActionHandler("seekto", (details) => {
       if (details.seekTime !== undefined) {
         setProgress(details.seekTime);
+        if (activeEngineRef.current === "native" && nativeAudioRef.current) {
+          nativeAudioRef.current.currentTime = details.seekTime;
+        }
         if (isPlayerReadyRef.current && playerRef.current) {
           playerRef.current.seekTo(details.seekTime, true);
         }
@@ -584,6 +699,10 @@ export function PlayerBar() {
         if (action === "playpause") {
           const nextPlaying = !isPlaying;
           setIsPlaying(nextPlaying);
+          if (activeEngineRef.current === "native" && nativeAudioRef.current) {
+            if (nextPlaying) nativeAudioRef.current.play().catch(console.warn);
+            else nativeAudioRef.current.pause();
+          }
           if (isPlayerReadyRef.current && playerRef.current) {
             if (nextPlaying) playerRef.current.playVideo?.();
             else playerRef.current.pauseVideo?.();
@@ -603,6 +722,14 @@ export function PlayerBar() {
     const nextPlaying = !isPlaying;
     setIsPlaying(nextPlaying);
 
+    if (activeEngineRef.current === "native" && nativeAudioRef.current) {
+      if (nextPlaying) {
+        nativeAudioRef.current.play().catch(console.warn);
+      } else {
+        nativeAudioRef.current.pause();
+      }
+    }
+
     if (isPlayerReadyRef.current && playerRef.current) {
       try {
         if (nextPlaying) {
@@ -620,6 +747,9 @@ export function PlayerBar() {
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = parseFloat(e.target.value);
     setProgress(newTime);
+    if (activeEngineRef.current === "native" && nativeAudioRef.current) {
+      nativeAudioRef.current.currentTime = newTime;
+    }
     if (isPlayerReadyRef.current && playerRef.current) {
       playerRef.current.seekTo(newTime, true);
     }
@@ -629,6 +759,12 @@ export function PlayerBar() {
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVol = parseFloat(e.target.value);
     setVolume(newVol);
+    if (nativeAudioRef.current) {
+      if (isMuted && newVol > 0) {
+        nativeAudioRef.current.muted = false;
+      }
+      nativeAudioRef.current.volume = isMuted ? 0 : Math.min(1, Math.max(0, newVol));
+    }
     if (isPlayerReadyRef.current && playerRef.current) {
       if (isMuted && newVol > 0) {
         toggleMute();
@@ -646,6 +782,9 @@ export function PlayerBar() {
   const handleToggleMute = () => {
     const nextMuted = !isMuted;
     toggleMute();
+    if (nativeAudioRef.current) {
+      nativeAudioRef.current.muted = nextMuted;
+    }
     if (isPlayerReadyRef.current && playerRef.current) {
       if (nextMuted) {
         playerRef.current.mute();
@@ -703,10 +842,62 @@ export function PlayerBar() {
 
   return (
     <>
-      {/* Hidden YouTube IFrame Player */}
+      {/* Off-screen YouTube IFrame Player (kept active in layout tree to prevent Chromium frame throttling) */}
       <div
         id="yt-hidden-player"
-        className="hidden pointer-events-none w-0 h-0 overflow-hidden"
+        className="fixed -top-[9999px] -left-[9999px] w-[200px] h-[200px] opacity-[0.001] pointer-events-none z-[-1]"
+        aria-hidden="true"
+      />
+
+      {/* Direct Native Audiophile Audio Stream (Lossless AAC/Opus fallback) */}
+      <audio
+        ref={nativeAudioRef}
+        id="aether-native-audio"
+        preload="auto"
+        className="hidden"
+        onPlay={() => {
+          setIsPlaying(true);
+          setHasError(false);
+        }}
+        onPause={() => {
+          if (activeEngineRef.current === "native") {
+            setIsPlaying(false);
+          }
+        }}
+        onTimeUpdate={(e) => {
+          if (activeEngineRef.current === "native") {
+            setProgress(e.currentTarget.currentTime);
+          }
+        }}
+        onLoadedMetadata={(e) => {
+          if (activeEngineRef.current === "native" && e.currentTarget.duration) {
+            setDuration(e.currentTarget.duration);
+          }
+        }}
+        onEnded={() => {
+          if (activeEngineRef.current === "native") {
+            const currentRepeat = usePlayerStore.getState().repeatMode;
+            if (currentRepeat === "one") {
+              if (nativeAudioRef.current) {
+                nativeAudioRef.current.currentTime = 0;
+                nativeAudioRef.current.play().catch(console.warn);
+              }
+            } else {
+              setIsPlaying(false);
+              usePlayerStore.getState().nextTrack();
+            }
+          }
+        }}
+        onError={(e) => {
+          console.warn("Native audio stream error:", e);
+          if (activeEngineRef.current === "native") {
+            setHasError(true);
+            setTimeout(() => {
+              setHasError(false);
+              usePlayerStore.getState().nextTrack();
+            }, 2500);
+          }
+        }}
       />
 
       {/* Floating Dynamic Island Luxury Player Dock */}
