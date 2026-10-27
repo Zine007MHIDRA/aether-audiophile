@@ -16,6 +16,7 @@ import { SleepTimerModal } from "@/components/SleepTimerModal";
 import { AudioDynamicsModal } from "@/components/AudioDynamicsModal";
 import { EditPlaylistModal } from "@/components/EditPlaylistModal";
 import { AccountSecurityModal } from "@/components/AccountSecurityModal";
+import { AppIntroSplash } from "@/components/AppIntroSplash";
 
 export const metadata: Metadata = {
   title: "Aether — Audiophile Music",
@@ -80,6 +81,9 @@ export default function RootLayout({
         <SleepTimerModal />
         <AudioDynamicsModal />
         <EditPlaylistModal />
+
+        {/* Cinematic Audiophile Sanctuary Boot Sequence */}
+        <AppIntroSplash />
       </body>
     </html>
   );

@@ -55,6 +55,10 @@ export default function HomePage() {
       }
       if (data.tracks && Array.isArray(data.tracks)) {
         setTrendingTracks(data.tracks);
+        // Notify AppIntroSplash that initial catalog is fully primed
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("aether-ready"));
+        }
       }
     } catch (err) {
       console.error("Aether catalog error:", err);
@@ -93,14 +97,14 @@ export default function HomePage() {
         })}
       </div>
 
-      {/* Editorial Spotlight Banner */}
+      {/* Editorial Spotlight Banner (or Luxury Hero Skeleton while tuning) */}
       {heroTrack && !loading ? (
-        <div className="relative rounded-3xl overflow-hidden border border-aether-border/50 bg-gradient-to-r from-aether-surface via-aether-elevated to-aether-dark p-6 md:p-10 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8">
+        <div className="relative rounded-3xl overflow-hidden border border-aether-border/50 bg-gradient-to-r from-aether-surface via-aether-elevated to-aether-dark p-6 md:p-10 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8 transition-all duration-500">
           {/* Ambient Glow */}
           <div className="absolute top-0 right-0 w-96 h-96 bg-aether-gold/10 rounded-full blur-3xl pointer-events-none" />
 
           <div className="flex flex-col gap-3.5 max-w-xl z-10 text-center md:text-left items-center md:items-start">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-aether-gold/15 border border-aether-gold/30 text-aether-gold text-[10px] font-mono tracking-widest uppercase">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-aether-gold/15 border border-aether-gold/30 text-aether-gold text-[10px] font-mono tracking-widest uppercase">
               <Sparkles className="w-3.5 h-3.5" />
               <span>
                 {selectedCategory === "all"
@@ -140,7 +144,23 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-      ) : null}
+      ) : (
+        /* Luxury Hero Skeleton - Prevents layout shift during loading */
+        <div className="relative rounded-3xl overflow-hidden border border-aether-border/40 bg-gradient-to-r from-aether-surface/60 via-aether-elevated/40 to-aether-dark/60 p-6 md:p-10 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-aether-gold/5 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex flex-col gap-4 max-w-xl z-10 w-full items-center md:items-start">
+            <div className="h-6 w-52 rounded-full bg-aether-gold/15 border border-aether-gold/25 animate-pulse" />
+            <div className="h-10 md:h-12 w-4/5 rounded-2xl bg-aether-highlight/60 animate-pulse" />
+            <div className="h-4 w-1/2 rounded-lg bg-aether-highlight/40 animate-pulse" />
+            <div className="h-11 w-44 rounded-full bg-aether-gold/20 border border-aether-gold/30 mt-2 animate-pulse" />
+          </div>
+
+          <div className="relative w-40 h-40 md:w-52 md:h-52 rounded-2xl overflow-hidden border border-aether-gold/20 bg-aether-highlight/50 shadow-2xl shrink-0 animate-pulse flex items-center justify-center">
+            <Disc className="w-16 h-16 text-aether-gold/20 animate-spin" style={{ animationDuration: "10s" }} />
+          </div>
+        </div>
+      )}
 
       {/* Grid: Global Discoveries */}
       <section className="flex flex-col gap-5">
@@ -153,26 +173,50 @@ export default function HomePage() {
                 : CATEGORIES.find((c) => c.id === selectedCategory)?.label || "Selected Works & Anthems"}
             </h2>
           </div>
-          <span className="text-[10px] text-aether-muted font-mono uppercase tracking-widest">
-            {loading ? "Tuning Sanctuary..." : `${trendingTracks.length} Verified Master Tracks`}
-          </span>
+          {loading ? (
+            <div className="flex items-center gap-2 text-[10px] text-aether-gold font-mono uppercase tracking-widest">
+              <div className="w-1.5 h-1.5 rounded-full bg-aether-gold animate-ping" />
+              <span>Tuning Sanctuary...</span>
+            </div>
+          ) : (
+            <span className="text-[10px] text-aether-muted font-mono uppercase tracking-widest">
+              {`${trendingTracks.length} Verified Master Tracks`}
+            </span>
+          )}
         </div>
 
-        {loading ? (
+        {/* Dynamic Laser Loading Line on Category Switch */}
+        {loading && trendingTracks.length > 0 && (
+          <div className="relative w-full h-0.5 overflow-hidden rounded-full bg-aether-border/30 -mt-2">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-aether-gold to-transparent animate-pulse" />
+          </div>
+        )}
+
+        {/* Grid: Tracks or Luxury Gold Shimmer Skeletons */}
+        {loading && trendingTracks.length === 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {Array.from({ length: 10 }).map((_, i) => (
               <div
                 key={i}
-                className="bg-aether-surface/40 border border-aether-border/30 rounded-2xl p-4 flex flex-col gap-3 animate-pulse"
+                className="bg-aether-elevated/40 border border-aether-border/30 rounded-2xl p-3.5 flex flex-col gap-3 relative overflow-hidden"
               >
-                <div className="aspect-square bg-aether-highlight rounded-xl" />
-                <div className="h-3.5 bg-aether-highlight rounded w-3/4" />
-                <div className="h-2.5 bg-aether-highlight rounded w-1/2" />
+                <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-aether-highlight/60 border border-aether-border/30">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-aether-gold/10 to-transparent animate-pulse" />
+                  <div className="absolute top-2.5 left-2.5 w-7 h-4 rounded bg-black/60 border border-aether-gold/20" />
+                </div>
+                <div className="flex flex-col gap-2 px-0.5">
+                  <div className="h-3.5 bg-aether-highlight/70 rounded w-4/5 animate-pulse" />
+                  <div className="h-2.5 bg-aether-highlight/40 rounded w-1/2 animate-pulse" />
+                </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          <div
+            className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 transition-opacity duration-300 ${
+              loading ? "opacity-60" : "opacity-100"
+            }`}
+          >
             {trendingTracks.slice(1, 11).map((track) => (
               <TrackCard
                 key={track.id}
