@@ -75,6 +75,19 @@ function checkHttpReady(url) {
 // Start embedded Next.js production server
 async function startProductionServer(appDir) {
   log("Starting Next.js production server in:", appDir);
+
+  // Self-heal BUILD_ID if missing so Next.js never throws production-start-no-build-id
+  const dotNextDir = path.join(appDir, ".next");
+  const buildIdPath = path.join(dotNextDir, "BUILD_ID");
+  if (fs.existsSync(dotNextDir) && !fs.existsSync(buildIdPath)) {
+    try {
+      fs.writeFileSync(buildIdPath, "aether-standalone-production");
+      log("Injected fallback BUILD_ID:", buildIdPath);
+    } catch (err) {
+      log("Warning: could not write fallback BUILD_ID:", err.message);
+    }
+  }
+
   const next = require("next");
   const nextApp = next({
     dev: false,

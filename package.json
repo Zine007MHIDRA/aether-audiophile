@@ -56,6 +56,7 @@
     "files": [
       "electron/**/*",
       ".next/**/*",
+      ".next/BUILD_ID",
       "public/**/*",
       "package.json",
       "node_modules/**/*"
