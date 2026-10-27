@@ -48,6 +48,13 @@ export function TrackCard({ track, tracksContext }: TrackCardProps) {
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
         />
 
+        {/* Billboard Hot 100 Rank Badge */}
+        {track.rank ? (
+          <div className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-md border border-aether-gold/50 text-[10px] font-mono font-bold text-aether-gold flex items-center gap-1 shadow-md z-10">
+            <span>#{track.rank}</span>
+          </div>
+        ) : null}
+
         {/* Floating 3-dots Context Menu Button */}
         <button
           onClick={(e) => {

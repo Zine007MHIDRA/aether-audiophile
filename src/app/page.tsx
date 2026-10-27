@@ -15,7 +15,7 @@ interface CategoryOption {
 }
 
 const CATEGORIES: CategoryOption[] = [
-  { id: "all", label: "Global Top 50", icon: Sparkles },
+  { id: "all", label: "Billboard Hot 100", icon: Sparkles },
   { id: "pop", label: "Pop Anthems", icon: Disc },
   { id: "hiphop", label: "Hip-Hop & R&B", icon: Flame },
   { id: "electronic", label: "Electronic & Dance", icon: Zap },
@@ -23,9 +23,25 @@ const CATEGORIES: CategoryOption[] = [
   { id: "chill", label: "Acoustic & Chill", icon: Moon },
 ];
 
+function formatChartWeek(dateStr?: string | null): string {
+  if (!dateStr) return "Late October 2026";
+  try {
+    const d = new Date(`${dateStr}T00:00:00Z`);
+    return `Week of ${d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    })}`;
+  } catch {
+    return dateStr;
+  }
+}
+
 export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [trendingTracks, setTrendingTracks] = useState<Track[]>([]);
+  const [chartDate, setChartDate] = useState<string | null>("2026-10-24");
   const [loading, setLoading] = useState(true);
   const playTrack = usePlayerStore((state) => state.playTrack);
 
@@ -34,6 +50,9 @@ export default function HomePage() {
     try {
       const res = await fetch(`/api/home?category=${encodeURIComponent(cat)}`);
       const data = await res.json();
+      if (data.chartDate) {
+        setChartDate(data.chartDate);
+      }
       if (data.tracks && Array.isArray(data.tracks)) {
         setTrendingTracks(data.tracks);
       }
@@ -83,7 +102,11 @@ export default function HomePage() {
           <div className="flex flex-col gap-3.5 max-w-xl z-10 text-center md:text-left items-center md:items-start">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-aether-gold/15 border border-aether-gold/30 text-aether-gold text-[10px] font-mono tracking-widest uppercase">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Billboard & Global Chart Highlight</span>
+              <span>
+                {selectedCategory === "all"
+                  ? `Official Billboard Hot 100 • #1 Record • ${formatChartWeek(chartDate || heroTrack.chartDate)}`
+                  : "Featured Genre Spotlight"}
+              </span>
             </div>
             <h1 className="text-2xl md:text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-tight line-clamp-2">
               {heroTrack.title}
@@ -125,7 +148,9 @@ export default function HomePage() {
           <div className="flex items-center gap-2.5">
             <Disc className="w-4 h-4 text-aether-gold" />
             <h2 className="text-sm font-bold text-white tracking-wider uppercase font-mono">
-              {CATEGORIES.find((c) => c.id === selectedCategory)?.label || "Selected Works & Anthems"}
+              {selectedCategory === "all"
+                ? `Official Billboard Hot 100 (${formatChartWeek(chartDate)})`
+                : CATEGORIES.find((c) => c.id === selectedCategory)?.label || "Selected Works & Anthems"}
             </h2>
           </div>
           <span className="text-[10px] text-aether-muted font-mono uppercase tracking-widest">

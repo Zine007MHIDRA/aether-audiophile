@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getInnertube, getHighResThumbnail } from "@/lib/youtube";
+import { getLiveBillboardHot100, BillboardSong } from "@/lib/billboard";
 import { Track } from "@/types/music";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +9,9 @@ export const dynamic = "force-dynamic";
 interface CacheEntry {
   tracks: Track[];
   timestamp: number;
+  chartDate?: string;
 }
-const CACHE_TTL_MS = 1000 * 60 * 30; // 30 minutes
+const CACHE_TTL_MS = 1000 * 60 * 60; // 1 hour cache matching Billboard weekly refresh
 const memoryCache = new Map<string, CacheEntry>();
 
 // Anti-spam & bootleg compilation blocker
@@ -169,6 +171,94 @@ const CATEGORY_QUERIES: Record<string, string[]> = {
 const FALLBACK_TRACKS: Record<string, Track[]> = {
   all: [
     {
+      id: "V-uIp-WuD60",
+      title: "Patient Zero",
+      artist: "Taylor Swift",
+      album: "Patient Zero",
+      duration: 218,
+      durationFormatted: "3:38",
+      thumbnail: "https://i.ytimg.com/vi/V-uIp-WuD60/maxresdefault.jpg",
+      rank: 1,
+      chartDate: "2026-10-24",
+    },
+    {
+      id: "xukbqwRuN5w",
+      title: "Choosin' Texas",
+      artist: "Ella Langley",
+      album: "hungover",
+      duration: 194,
+      durationFormatted: "3:14",
+      thumbnail: "https://i.ytimg.com/vi/xukbqwRuN5w/maxresdefault.jpg",
+      rank: 2,
+      chartDate: "2026-10-24",
+    },
+    {
+      id: "6KjVYeQ9SRw",
+      title: "Boston",
+      artist: "Stella Lefty",
+      album: "Boston",
+      duration: 182,
+      durationFormatted: "3:02",
+      thumbnail: "https://i.ytimg.com/vi/6KjVYeQ9SRw/maxresdefault.jpg",
+      rank: 3,
+      chartDate: "2026-10-24",
+    },
+    {
+      id: "-YOpbOA8-5o",
+      title: "Been By Now",
+      artist: "Morgan Wallen",
+      album: "One Thing At A Time",
+      duration: 204,
+      durationFormatted: "3:24",
+      thumbnail: "https://i.ytimg.com/vi/-YOpbOA8-5o/maxresdefault.jpg",
+      rank: 4,
+      chartDate: "2026-10-24",
+    },
+    {
+      id: "8_C6lXoGB5Y",
+      title: "Dracula",
+      artist: "Tame Impala & JENNIE",
+      album: "Dracula",
+      duration: 232,
+      durationFormatted: "3:52",
+      thumbnail: "https://i.ytimg.com/vi/8_C6lXoGB5Y/maxresdefault.jpg",
+      rank: 5,
+      chartDate: "2026-10-24",
+    },
+    {
+      id: "_U9h14uW6g8",
+      title: "Nicole Kidman",
+      artist: "ADELA",
+      album: "Nicole Kidman",
+      duration: 176,
+      durationFormatted: "2:56",
+      thumbnail: "https://i.ytimg.com/vi/_U9h14uW6g8/maxresdefault.jpg",
+      rank: 6,
+      chartDate: "2026-10-24",
+    },
+    {
+      id: "xXnJgX38N60",
+      title: "Hate That I Made You Love Me",
+      artist: "Ariana Grande",
+      album: "eternal sunshine",
+      duration: 215,
+      durationFormatted: "3:35",
+      thumbnail: "https://i.ytimg.com/vi/xXnJgX38N60/maxresdefault.jpg",
+      rank: 7,
+      chartDate: "2026-10-24",
+    },
+    {
+      id: "170X1b9eQ08",
+      title: "Stupid Song",
+      artist: "Olivia Rodrigo",
+      album: "GUTS",
+      duration: 190,
+      durationFormatted: "3:10",
+      thumbnail: "https://i.ytimg.com/vi/170X1b9eQ08/maxresdefault.jpg",
+      rank: 8,
+      chartDate: "2026-10-24",
+    },
+    {
       id: "DlFXDl_ROAM",
       title: "Die With A Smile",
       artist: "Lady Gaga & Bruno Mars",
@@ -176,6 +266,8 @@ const FALLBACK_TRACKS: Record<string, Track[]> = {
       duration: 251,
       durationFormatted: "4:11",
       thumbnail: "https://i.ytimg.com/vi/DlFXDl_ROAM/maxresdefault.jpg",
+      rank: 9,
+      chartDate: "2026-10-24",
     },
     {
       id: "kIft-LUHHVA",
@@ -185,6 +277,8 @@ const FALLBACK_TRACKS: Record<string, Track[]> = {
       duration: 175,
       durationFormatted: "2:55",
       thumbnail: "https://i.ytimg.com/vi/kIft-LUHHVA/maxresdefault.jpg",
+      rank: 10,
+      chartDate: "2026-10-24",
     },
     {
       id: "WKZO-CWeOVA",
@@ -194,6 +288,8 @@ const FALLBACK_TRACKS: Record<string, Track[]> = {
       duration: 194,
       durationFormatted: "3:14",
       thumbnail: "https://i.ytimg.com/vi/WKZO-CWeOVA/maxresdefault.jpg",
+      rank: 11,
+      chartDate: "2026-10-24",
     },
     {
       id: "phLb_SoPBlA",
@@ -203,78 +299,8 @@ const FALLBACK_TRACKS: Record<string, Track[]> = {
       duration: 274,
       durationFormatted: "4:34",
       thumbnail: "https://i.ytimg.com/vi/phLb_SoPBlA/maxresdefault.jpg",
-    },
-    {
-      id: "DPaqlPFznBI",
-      title: "A Bar Song (Tipsy)",
-      artist: "Shaboozey",
-      album: "Where I've Been, Isn't Where I'm Going",
-      duration: 171,
-      durationFormatted: "2:51",
-      thumbnail: "https://i.ytimg.com/vi/DPaqlPFznBI/maxresdefault.jpg",
-    },
-    {
-      id: "VZ-oGLluGAc",
-      title: "Good Luck, Babe!",
-      artist: "Chappell Roan",
-      album: "Good Luck, Babe!",
-      duration: 218,
-      durationFormatted: "3:38",
-      thumbnail: "https://i.ytimg.com/vi/VZ-oGLluGAc/maxresdefault.jpg",
-    },
-    {
-      id: "a4O-abCXsfA",
-      title: "Timeless",
-      artist: "The Weeknd & Playboi Carti",
-      album: "Hurry Up Tomorrow",
-      duration: 256,
-      durationFormatted: "4:16",
-      thumbnail: "https://i.ytimg.com/vi/a4O-abCXsfA/maxresdefault.jpg",
-    },
-    {
-      id: "-5GI38vWew8",
-      title: "Taste",
-      artist: "Sabrina Carpenter",
-      album: "Short n' Sweet",
-      duration: 157,
-      durationFormatted: "2:37",
-      thumbnail: "https://i.ytimg.com/vi/-5GI38vWew8/maxresdefault.jpg",
-    },
-    {
-      id: "AeedWEyMYYo",
-      title: "Lose Control",
-      artist: "Teddy Swims",
-      album: "I've Tried Everything But Therapy",
-      duration: 210,
-      durationFormatted: "3:30",
-      thumbnail: "https://i.ytimg.com/vi/AeedWEyMYYo/maxresdefault.jpg",
-    },
-    {
-      id: "eLhSxOAaWmg",
-      title: "Beautiful Things",
-      artist: "Benson Boone",
-      album: "Fireworks & Rollerblades",
-      duration: 180,
-      durationFormatted: "3:00",
-      thumbnail: "https://i.ytimg.com/vi/eLhSxOAaWmg/maxresdefault.jpg",
-    },
-    {
-      id: "B8VEqSBTjZQ",
-      title: "I Had Some Help",
-      artist: "Post Malone ft. Morgan Wallen",
-      album: "F-1 Trillion",
-      duration: 178,
-      durationFormatted: "2:58",
-      thumbnail: "https://i.ytimg.com/vi/B8VEqSBTjZQ/maxresdefault.jpg",
-    },
-    {
-      id: "fJ9rUzIMcZQ",
-      title: "Blinding Lights",
-      artist: "The Weeknd",
-      album: "After Hours",
-      duration: 200,
-      durationFormatted: "3:20",
-      thumbnail: "https://i.ytimg.com/vi/fJ9rUzIMcZQ/maxresdefault.jpg",
+      rank: 12,
+      chartDate: "2026-10-24",
     },
   ],
 };
@@ -286,10 +312,12 @@ export async function GET(request: NextRequest) {
   // 1. Check in-memory cache
   const cached = memoryCache.get(category);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS && cached.tracks.length > 0) {
-    return NextResponse.json({ tracks: cached.tracks, source: "cache" });
+    return NextResponse.json({
+      tracks: cached.tracks,
+      chartDate: cached.chartDate,
+      source: "cache",
+    });
   }
-
-  const queries = CATEGORY_QUERIES[category] || CATEGORY_QUERIES.all;
 
   try {
     const yt = await getInnertube();
@@ -297,75 +325,162 @@ export async function GET(request: NextRequest) {
     const seenIds = new Set<string>();
     const seenThumbnails = new Set<string>();
 
-    // Query genuine chart toppers in parallel
-    const searchPromises = queries.map(async (query) => {
-      try {
-        const res = await yt.music.search(query, { type: "song" });
-        const items = (res.songs?.contents || res.contents || []) as any[];
+    if (category === "all") {
+      // DYNAMIC BILLBOARD HOT 100 INGESTION FOR CURRENT 2026 DATE
+      const billboardData = await getLiveBillboardHot100();
+      const billboardEntries = billboardData.songs.slice(0, 24);
 
-        // Find the first non-spam item
-        for (const item of items.slice(0, 3)) {
-          if (!item?.id) continue;
-          const title =
-            typeof item.title === "string"
-              ? item.title
-              : item.title?.text || item.name || "Track";
-          const artist =
-            item.artists?.[0]?.name || item.author?.name || "Featured Artist";
+      const billboardPromises = billboardEntries.map(async (entry) => {
+        try {
+          const res = await yt.music.search(`${entry.song} ${entry.artist}`, { type: "song" });
+          const items = (res.songs?.contents || res.contents || []) as any[];
 
-          if (isSpamTrack(title, artist)) continue;
+          for (const item of items.slice(0, 3)) {
+            if (!item?.id) continue;
+            const itemTitle =
+              typeof item.title === "string"
+                ? item.title
+                : item.title?.text || item.name || entry.song;
+            const itemArtist =
+              item.artists?.[0]?.name || item.author?.name || entry.artist;
 
-          const durationSec = item.duration?.seconds || 210;
-          const durationFormatted = item.duration?.text || "3:30";
-          const rawThumb =
-            item.thumbnails?.[0]?.url ||
-            item.thumbnails?.[item.thumbnails.length - 1]?.url;
-          const thumbnail = getHighResThumbnail(rawThumb, item.id);
+            if (isSpamTrack(itemTitle, itemArtist)) continue;
 
-          return {
-            id: item.id,
-            title,
-            artist,
-            album: item.album?.name || "Studio Master",
-            duration: durationSec,
-            durationFormatted,
-            thumbnail,
-          };
+            const durationSec = item.duration?.seconds || 210;
+            const durationFormatted = item.duration?.text || "3:30";
+            const rawThumb =
+              item.thumbnails?.[0]?.url ||
+              item.thumbnails?.[item.thumbnails.length - 1]?.url;
+            const thumbnail = getHighResThumbnail(rawThumb, item.id);
+
+            return {
+              id: item.id,
+              title: entry.song,
+              artist: entry.artist,
+              album: item.album?.name || "Billboard Hot 100 Single",
+              duration: durationSec,
+              durationFormatted,
+              thumbnail,
+              rank: entry.this_week,
+              chartDate: billboardData.date,
+            };
+          }
+          return null;
+        } catch {
+          return null;
         }
-        return null;
-      } catch {
-        return null;
+      });
+
+      const searchResults = await Promise.all(billboardPromises);
+
+      for (const track of searchResults) {
+        if (!track) continue;
+        if (seenIds.has(track.id)) continue;
+
+        const thumbKey = track.thumbnail.split("?")[0].split("=")[0];
+        if (seenThumbnails.has(thumbKey)) continue;
+
+        seenIds.add(track.id);
+        seenThumbnails.add(thumbKey);
+        tracks.push(track);
       }
-    });
 
-    const searchResults = await Promise.all(searchPromises);
+      // Sort by Billboard rank to ensure clean 1, 2, 3... order
+      tracks.sort((a, b) => (a.rank || 999) - (b.rank || 999));
 
-    for (const track of searchResults) {
-      if (!track) continue;
-      if (seenIds.has(track.id)) continue;
+      if (tracks.length >= 8) {
+        memoryCache.set(category, {
+          tracks,
+          timestamp: Date.now(),
+          chartDate: billboardData.date,
+        });
+        return NextResponse.json({
+          tracks,
+          chartDate: billboardData.date,
+          source: "billboard-live",
+        });
+      }
+    } else {
+      // GENRE-SPECIFIC CURATION
+      const queries = CATEGORY_QUERIES[category] || CATEGORY_QUERIES.all;
+      const searchPromises = queries.map(async (query) => {
+        try {
+          const res = await yt.music.search(query, { type: "song" });
+          const items = (res.songs?.contents || res.contents || []) as any[];
 
-      // Extract base thumbnail key to guarantee unique artwork across all cards
-      const thumbKey = track.thumbnail.split("?")[0].split("=")[0];
-      if (seenThumbnails.has(thumbKey)) continue;
+          for (const item of items.slice(0, 3)) {
+            if (!item?.id) continue;
+            const title =
+              typeof item.title === "string"
+                ? item.title
+                : item.title?.text || item.name || "Track";
+            const artist =
+              item.artists?.[0]?.name || item.author?.name || "Featured Artist";
 
-      seenIds.add(track.id);
-      seenThumbnails.add(thumbKey);
-      tracks.push(track);
+            if (isSpamTrack(title, artist)) continue;
+
+            const durationSec = item.duration?.seconds || 210;
+            const durationFormatted = item.duration?.text || "3:30";
+            const rawThumb =
+              item.thumbnails?.[0]?.url ||
+              item.thumbnails?.[item.thumbnails.length - 1]?.url;
+            const thumbnail = getHighResThumbnail(rawThumb, item.id);
+
+            return {
+              id: item.id,
+              title,
+              artist,
+              album: item.album?.name || "Studio Master",
+              duration: durationSec,
+              durationFormatted,
+              thumbnail,
+            };
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      });
+
+      const searchResults = await Promise.all(searchPromises);
+
+      for (const track of searchResults) {
+        if (!track) continue;
+        if (seenIds.has(track.id)) continue;
+
+        const thumbKey = track.thumbnail.split("?")[0].split("=")[0];
+        if (seenThumbnails.has(thumbKey)) continue;
+
+        seenIds.add(track.id);
+        seenThumbnails.add(thumbKey);
+        tracks.push(track);
+      }
+
+      if (tracks.length >= 8) {
+        memoryCache.set(category, { tracks, timestamp: Date.now() });
+        return NextResponse.json({ tracks, source: "innertube" });
+      }
     }
 
-    // If fetched results are solid, store in memory cache
-    if (tracks.length >= 8) {
-      memoryCache.set(category, { tracks, timestamp: Date.now() });
-      return NextResponse.json({ tracks, source: "innertube" });
-    }
-
-    // Fallback if network was throttled
+    // Fallback if needed
     const fallback = FALLBACK_TRACKS[category] || FALLBACK_TRACKS.all;
-    memoryCache.set(category, { tracks: fallback, timestamp: Date.now() });
-    return NextResponse.json({ tracks: fallback, source: "fallback" });
+    memoryCache.set(category, {
+      tracks: fallback,
+      timestamp: Date.now(),
+      chartDate: "2026-10-24",
+    });
+    return NextResponse.json({
+      tracks: fallback,
+      chartDate: "2026-10-24",
+      source: "fallback",
+    });
   } catch (error: any) {
     console.error("Home feed error, serving fallback:", error);
     const fallback = FALLBACK_TRACKS[category] || FALLBACK_TRACKS.all;
-    return NextResponse.json({ tracks: fallback, source: "fallback" });
+    return NextResponse.json({
+      tracks: fallback,
+      chartDate: "2026-10-24",
+      source: "fallback",
+    });
   }
 }

@@ -76,7 +76,7 @@ export function TrackRow({
             <Play className="w-3.5 h-3.5 fill-[#D4AF37] text-[#D4AF37]" />
           ) : (
             <>
-              <span className="group-hover:hidden">{index + 1}</span>
+              <span className="group-hover:hidden">{track.rank ? `#${track.rank}` : index + 1}</span>
               <Play className="w-3.5 h-3.5 fill-[#D4AF37] text-[#D4AF37] hidden group-hover:block" />
             </>
           )}

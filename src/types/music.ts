@@ -6,6 +6,8 @@ export interface Track {
   duration: number; // in seconds
   durationFormatted: string; // e.g. "3:45"
   thumbnail: string;
+  rank?: number;
+  chartDate?: string;
 }
 
 export interface SearchResults {
