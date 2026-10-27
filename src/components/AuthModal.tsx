@@ -18,6 +18,13 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
 import { usePlaylistStore } from "@/store/playlist-store";
+import { HarmonicSlider } from "./HarmonicSlider";
+import { PasswordStrengthMeter } from "./PasswordStrengthMeter";
+import {
+  isDisposableEmail,
+  isBotVelocity,
+  isHoneypotTriggered,
+} from "@/lib/security";
 
 export function AuthModal() {
   const {
@@ -62,6 +69,36 @@ export function AuthModal() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
 
+  // Bot Shield & Security States
+  const [isVerifiedHuman, setIsVerifiedHuman] = useState(false);
+  const [honeypot, setHoneypot] = useState("");
+  const [mountedAt, setMountedAt] = useState<number>(() => Date.now());
+
+  // Brute-force lockout state
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [lockoutSecondsLeft, setLockoutSecondsLeft] = useState(0);
+
+  // Countdown effect for lockout timer
+  useEffect(() => {
+    if (!lockoutUntil) {
+      setLockoutSecondsLeft(0);
+      return;
+    }
+
+    const updateTimer = () => {
+      const remaining = Math.max(0, Math.ceil((lockoutUntil - Date.now()) / 1000));
+      setLockoutSecondsLeft(remaining);
+      if (remaining <= 0) {
+        setLockoutUntil(null);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutUntil]);
+
   // Catch URL ?reset=true on mount (when coming from email password reset link)
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -98,15 +135,58 @@ export function AuthModal() {
     setIsPasswordRecovery(false);
     setNewPassword("");
     setConfirmNewPassword("");
+    setIsVerifiedHuman(false);
+    setHoneypot("");
+    setMountedAt(Date.now());
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     resetMessages();
 
+    // 1. Lockout check
+    if (lockoutSecondsLeft > 0) {
+      setErrorMsg(
+        `Too many failed attempts. Sanctuary access locked for ${lockoutSecondsLeft}s.`
+      );
+      return;
+    }
+
+    // 2. Honeypot check
+    if (isHoneypotTriggered(honeypot)) {
+      setLoading(true);
+      setTimeout(() => {
+        setLoading(false);
+        setErrorMsg("Sanctuary verification failure.");
+      }, 500);
+      return;
+    }
+
+    // 3. Velocity check
+    if (isBotVelocity(mountedAt, 800)) {
+      setErrorMsg("Automated velocity detected. Please slow down.");
+      return;
+    }
+
+    // 4. Domain & Disposable checks
     if (isFakeDomain) {
       setErrorMsg(
         "Please use a real email domain (e.g. @gmail.com or @mailinator.com) — Supabase blocks @example.com"
+      );
+      return;
+    }
+
+    if (isDisposableEmail(email)) {
+      setErrorMsg(
+        "Disposable and temporary email providers are not permitted for Sanctuary access."
+      );
+      return;
+    }
+
+    // 5. Human slider verification for Sign Up
+    if (isSignUp && !isVerifiedHuman) {
+      setErrorMsg(
+        "Please complete the harmonic authentication slider to verify you are human."
       );
       return;
     }
@@ -151,10 +231,23 @@ export function AuthModal() {
       }
 
       if (res.error) {
+        const newAttempts = failedAttempts + 1;
+        setFailedAttempts(newAttempts);
+        if (newAttempts >= 5) {
+          const lockoutTime = Date.now() + 30000;
+          setLockoutUntil(lockoutTime);
+          setLockoutSecondsLeft(30);
+          setErrorMsg(
+            "Too many failed attempts. Sanctuary access locked for 30s."
+          );
+          return;
+        }
         setErrorMsg(res.error);
         return;
       }
 
+      setFailedAttempts(0);
+      setLockoutUntil(null);
       setSuccessMsg("Signed in successfully!");
       setTimeout(() => {
         syncVaultWithCloud();
@@ -177,6 +270,15 @@ export function AuthModal() {
     resetMessages();
     const target = forgotEmail.trim() || email.trim();
     if (!target) return;
+
+    if (isHoneypotTriggered(honeypot)) {
+      return;
+    }
+
+    if (isDisposableEmail(target)) {
+      setErrorMsg("Disposable email domains cannot receive recovery links.");
+      return;
+    }
 
     setLoading(true);
     const res = await sendPasswordResetEmail(target);
@@ -293,6 +395,8 @@ export function AuthModal() {
                     {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {/* Password Strength Entropy Meter */}
+                <PasswordStrengthMeter password={newPassword} />
               </div>
 
               <div className="flex flex-col gap-1.5 text-left">
@@ -448,6 +552,18 @@ export function AuthModal() {
             )}
 
             <form onSubmit={handleForgotPasswordSubmit} className="w-full flex flex-col gap-3 mt-1">
+              {/* Invisible Honeypot Field */}
+              <input
+                type="text"
+                name="sanctuary_vault_trap"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="new-password"
+                aria-hidden="true"
+                className="absolute opacity-0 pointer-events-none -left-[9999px] -top-[9999px]"
+              />
+
               <div className="flex flex-col gap-1.5 text-left">
                 <label className="text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
                   Email Address
@@ -466,6 +582,16 @@ export function AuthModal() {
                     className="w-full bg-aether-dark border border-aether-border/60 rounded-xl text-white text-xs pl-10 pr-4 py-3 placeholder-aether-muted focus:outline-none focus:border-aether-gold focus:ring-1 focus:ring-aether-gold/40 transition"
                   />
                 </div>
+
+                {/* Inline Disposable Email Warning */}
+                {isDisposableEmail(forgotEmail) && (
+                  <div className="flex items-center gap-1.5 text-rose-300 text-[11px] px-1 pt-1 animate-in fade-in">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      Disposable/temporary email domains are prohibited for Sanctuary accounts.
+                    </span>
+                  </div>
+                )}
               </div>
 
               <button
@@ -529,6 +655,9 @@ export function AuthModal() {
                 onClick={() => {
                   setIsSignUp(false);
                   resetMessages();
+                  setIsVerifiedHuman(false);
+                  setHoneypot("");
+                  setMountedAt(Date.now());
                 }}
                 className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
                   !isSignUp
@@ -543,6 +672,9 @@ export function AuthModal() {
                 onClick={() => {
                   setIsSignUp(true);
                   resetMessages();
+                  setIsVerifiedHuman(false);
+                  setHoneypot("");
+                  setMountedAt(Date.now());
                 }}
                 className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
                   isSignUp
@@ -553,6 +685,16 @@ export function AuthModal() {
                 Create Account
               </button>
             </div>
+
+            {/* Lockout Active Notice */}
+            {lockoutSecondsLeft > 0 && (
+              <div className="flex items-center gap-2 p-3 bg-amber-950/40 border border-amber-700/50 rounded-xl text-amber-300 text-xs animate-pulse">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>
+                  Sanctuary security cooldown active: retry in <strong>{lockoutSecondsLeft}s</strong>
+                </span>
+              </div>
+            )}
 
             {/* Status Alerts */}
             {errorMsg && (
@@ -569,6 +711,8 @@ export function AuthModal() {
                     onClick={() => {
                       setIsSignUp(false);
                       resetMessages();
+                      setIsVerifiedHuman(false);
+                      setMountedAt(Date.now());
                     }}
                     className="self-start text-[11px] text-aether-gold underline hover:text-white font-medium pl-6 transition"
                   >
@@ -601,6 +745,18 @@ export function AuthModal() {
 
             {/* Auth Form */}
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              {/* Invisible Honeypot Field */}
+              <input
+                type="text"
+                name="sanctuary_vault_trap"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="new-password"
+                aria-hidden="true"
+                className="absolute opacity-0 pointer-events-none -left-[9999px] -top-[9999px]"
+              />
+
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-mono text-aether-muted uppercase tracking-widest pl-1">
                   Email Address
@@ -626,6 +782,16 @@ export function AuthModal() {
                     <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                     <span>
                       Please use a real email domain (e.g. @gmail.com or @mailinator.com) — Supabase blocks @example.com
+                    </span>
+                  </div>
+                )}
+
+                {/* Inline Disposable Email Warning */}
+                {isDisposableEmail(email) && (
+                  <div className="flex items-center gap-1.5 text-rose-300 text-[11px] px-1 pt-1 animate-in fade-in">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      Disposable/temporary email domains are prohibited for Sanctuary accounts.
                     </span>
                   </div>
                 )}
@@ -677,11 +843,34 @@ export function AuthModal() {
                     )}
                   </button>
                 </div>
+
+                {/* Password Strength Entropy Meter (Sign Up) */}
+                {isSignUp && <PasswordStrengthMeter password={password} />}
               </div>
+
+              {/* Harmonic Human Authentication Slider (Sign Up verification) */}
+              {isSignUp && (
+                <div className="pt-1">
+                  <HarmonicSlider
+                    isVerified={isVerifiedHuman}
+                    onVerified={(verified) => {
+                      setIsVerifiedHuman(verified);
+                      if (verified && errorMsg) setErrorMsg("");
+                    }}
+                    onReset={() => setIsVerifiedHuman(false)}
+                  />
+                </div>
+              )}
 
               <button
                 type="submit"
-                disabled={loading || isFakeDomain}
+                disabled={
+                  loading ||
+                  isFakeDomain ||
+                  isDisposableEmail(email) ||
+                  lockoutSecondsLeft > 0 ||
+                  (isSignUp && !isVerifiedHuman)
+                }
                 className="flex items-center justify-center gap-2 w-full mt-2 bg-gradient-to-r from-aether-gold-hover via-aether-gold to-aether-gold-muted text-black font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-gold-glow hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
               >
                 {loading ? (
