@@ -49,6 +49,7 @@
     "appId": "com.aether.audiophile",
     "productName": "Aether",
     "copyright": "Copyright © 2026 Aether",
+    "asar": false,
     "directories": {
       "output": "dist"
     },

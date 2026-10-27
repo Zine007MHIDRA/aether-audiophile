@@ -4,7 +4,6 @@ const config: CapacitorConfig = {
   appId: "com.aether.audiophile",
   appName: "Aether",
   webDir: "out",
-  bundledWebRuntime: false,
   server: {
     androidScheme: "https",
     cleartext: true,
