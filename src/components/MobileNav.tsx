@@ -10,7 +10,7 @@ import { useAuthStore } from "@/store/auth-store";
 export function MobileNav() {
   const pathname = usePathname();
   const likedCount = usePlayerStore((state) => state.likedTrackIds.length);
-  const { user, openAuthModal, signOut } = useAuthStore();
+  const { user, openAuthModal, openSecurityModal, signOut } = useAuthStore();
 
   return (
     <header className="md:hidden flex items-center justify-between px-4 py-2.5 bg-aether-dark/95 border-b border-aether-border/40 backdrop-blur-xl shrink-0 z-30 select-none">
@@ -67,9 +67,13 @@ export function MobileNav() {
 
         {user ? (
           <div className="flex items-center gap-1.5 bg-aether-surface/80 border border-aether-gold/30 px-2 py-1 rounded-lg">
-            <span className="text-white text-[10px] font-semibold max-w-[75px] truncate">
+            <button
+              onClick={openSecurityModal}
+              className="text-white text-[10px] font-semibold max-w-[75px] truncate hover:text-aether-gold transition"
+              title="Open Sanctuary Security Center"
+            >
               {user.email?.split("@")[0]}
-            </span>
+            </button>
             <button
               onClick={signOut}
               className="p-1 text-aether-muted hover:text-rose-400 rounded transition"

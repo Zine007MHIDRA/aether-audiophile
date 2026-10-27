@@ -24,6 +24,9 @@ import {
   isDisposableEmail,
   isBotVelocity,
   isHoneypotTriggered,
+  getSecurityLockoutState,
+  recordFailedAttempt,
+  clearSecurityAttempts,
 } from "@/lib/security";
 
 export function AuthModal() {
@@ -74,30 +77,33 @@ export function AuthModal() {
   const [honeypot, setHoneypot] = useState("");
   const [mountedAt, setMountedAt] = useState<number>(() => Date.now());
 
-  // Brute-force lockout state
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  // Persistent brute-force lockout state
   const [lockoutSecondsLeft, setLockoutSecondsLeft] = useState(0);
 
-  // Countdown effect for lockout timer
+  // Sync persisted lockout on modal open
   useEffect(() => {
-    if (!lockoutUntil) {
-      setLockoutSecondsLeft(0);
-      return;
+    if (isAuthModalOpen) {
+      const state = getSecurityLockoutState();
+      setLockoutSecondsLeft(state.secondsLeft);
     }
+  }, [isAuthModalOpen]);
 
-    const updateTimer = () => {
-      const remaining = Math.max(0, Math.ceil((lockoutUntil - Date.now()) / 1000));
-      setLockoutSecondsLeft(remaining);
-      if (remaining <= 0) {
-        setLockoutUntil(null);
-      }
-    };
+  // Countdown effect for active lockout cooldown
+  useEffect(() => {
+    if (lockoutSecondsLeft <= 0) return;
 
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
+    const interval = setInterval(() => {
+      setLockoutSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
     return () => clearInterval(interval);
-  }, [lockoutUntil]);
+  }, [lockoutSecondsLeft]);
 
   // Catch URL ?reset=true on mount (when coming from email password reset link)
   useEffect(() => {
@@ -231,14 +237,11 @@ export function AuthModal() {
       }
 
       if (res.error) {
-        const newAttempts = failedAttempts + 1;
-        setFailedAttempts(newAttempts);
-        if (newAttempts >= 5) {
-          const lockoutTime = Date.now() + 30000;
-          setLockoutUntil(lockoutTime);
-          setLockoutSecondsLeft(30);
+        const { secondsLeft } = recordFailedAttempt();
+        if (secondsLeft > 0) {
+          setLockoutSecondsLeft(secondsLeft);
           setErrorMsg(
-            "Too many failed attempts. Sanctuary access locked for 30s."
+            `Too many failed attempts. Sanctuary access locked for ${secondsLeft}s.`
           );
           return;
         }
@@ -246,8 +249,8 @@ export function AuthModal() {
         return;
       }
 
-      setFailedAttempts(0);
-      setLockoutUntil(null);
+      clearSecurityAttempts();
+      setLockoutSecondsLeft(0);
       setSuccessMsg("Signed in successfully!");
       setTimeout(() => {
         syncVaultWithCloud();

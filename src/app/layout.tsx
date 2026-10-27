@@ -15,6 +15,7 @@ import { AudioEqualizerModal } from "@/components/AudioEqualizerModal";
 import { SleepTimerModal } from "@/components/SleepTimerModal";
 import { AudioDynamicsModal } from "@/components/AudioDynamicsModal";
 import { EditPlaylistModal } from "@/components/EditPlaylistModal";
+import { AccountSecurityModal } from "@/components/AccountSecurityModal";
 
 export const metadata: Metadata = {
   title: "Aether — Audiophile Music",
@@ -69,6 +70,7 @@ export default function RootLayout({
         {/* Modals & Overlays */}
         <LyricsModal />
         <AuthModal />
+        <AccountSecurityModal />
         <CreatePlaylistModal />
         <TrackContextMenu />
         <QueueDrawer />

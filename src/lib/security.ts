@@ -142,3 +142,88 @@ export function calculatePasswordStrength(password: string): PasswordStrength {
     hasSpecial,
   };
 }
+
+const LOCKOUT_STORAGE_KEY = "aether_sanctuary_lockout_state";
+
+export interface LockoutState {
+  failedAttempts: number;
+  lockoutUntil: number | null;
+}
+
+/**
+ * Retrieves the current persisted lockout state and remaining seconds.
+ */
+export function getSecurityLockoutState(): {
+  failedAttempts: number;
+  secondsLeft: number;
+} {
+  if (typeof window === "undefined") {
+    return { failedAttempts: 0, secondsLeft: 0 };
+  }
+  try {
+    const raw = localStorage.getItem(LOCKOUT_STORAGE_KEY);
+    if (!raw) return { failedAttempts: 0, secondsLeft: 0 };
+    const data: LockoutState = JSON.parse(raw);
+    const now = Date.now();
+    if (data.lockoutUntil && data.lockoutUntil > now) {
+      const secondsLeft = Math.ceil((data.lockoutUntil - now) / 1000);
+      return { failedAttempts: data.failedAttempts, secondsLeft };
+    }
+    return { failedAttempts: data.failedAttempts || 0, secondsLeft: 0 };
+  } catch {
+    return { failedAttempts: 0, secondsLeft: 0 };
+  }
+}
+
+/**
+ * Records a failed credential attempt and escalates lockouts progressively:
+ * - 5 failures -> 30s
+ * - 8 failures -> 60s
+ * - 10+ failures -> 300s (5 minutes)
+ */
+export function recordFailedAttempt(): {
+  failedAttempts: number;
+  secondsLeft: number;
+} {
+  if (typeof window === "undefined") {
+    return { failedAttempts: 1, secondsLeft: 0 };
+  }
+  try {
+    const curr = getSecurityLockoutState();
+    const newAttempts = curr.failedAttempts + 1;
+    let lockoutDurationMs = 0;
+
+    if (newAttempts >= 10) {
+      lockoutDurationMs = 300000; // 5 minutes
+    } else if (newAttempts >= 8) {
+      lockoutDurationMs = 60000; // 60 seconds
+    } else if (newAttempts >= 5) {
+      lockoutDurationMs = 30000; // 30 seconds
+    }
+
+    const lockoutUntil =
+      lockoutDurationMs > 0 ? Date.now() + lockoutDurationMs : null;
+    const state: LockoutState = {
+      failedAttempts: newAttempts,
+      lockoutUntil,
+    };
+    localStorage.setItem(LOCKOUT_STORAGE_KEY, JSON.stringify(state));
+    return {
+      failedAttempts: newAttempts,
+      secondsLeft:
+        lockoutDurationMs > 0 ? Math.ceil(lockoutDurationMs / 1000) : 0,
+    };
+  } catch {
+    return { failedAttempts: 1, secondsLeft: 0 };
+  }
+}
+
+/**
+ * Clears security attempts upon successful authentication.
+ */
+export function clearSecurityAttempts(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(LOCKOUT_STORAGE_KEY);
+  } catch {}
+}

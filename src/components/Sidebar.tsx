@@ -24,7 +24,7 @@ import { usePlaylistStore } from "@/store/playlist-store";
 export function Sidebar() {
   const pathname = usePathname();
   const likedCount = usePlayerStore((state) => state.likedTrackIds.length);
-  const { user, openAuthModal, signOut, initAuth } = useAuthStore();
+  const { user, openAuthModal, openSecurityModal, signOut, initAuth } = useAuthStore();
   const {
     playlists,
     openCreateModal,
@@ -257,19 +257,23 @@ export function Sidebar() {
       <div className="pt-3 border-t border-aether-border/40">
         {user ? (
           <div className="flex items-center justify-between p-2 rounded-xl bg-aether-surface/60 border border-aether-border/50">
-            <div className="flex items-center gap-2.5 min-w-0 pr-1">
-              <div className="w-7 h-7 rounded-lg bg-aether-gold/15 border border-aether-gold/30 flex items-center justify-center text-aether-gold shrink-0">
+            <button
+              onClick={openSecurityModal}
+              className="flex items-center gap-2.5 min-w-0 pr-1 text-left hover:opacity-90 transition group flex-1"
+              title="Open Sanctuary Security Center"
+            >
+              <div className="w-7 h-7 rounded-lg bg-aether-gold/15 border border-aether-gold/30 flex items-center justify-center text-aether-gold shrink-0 group-hover:border-aether-gold transition">
                 <User className="w-4 h-4" />
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="text-white text-[11px] font-semibold truncate">
+                <span className="text-white text-[11px] font-semibold truncate group-hover:text-aether-gold transition">
                   {user.email?.split("@")[0]}
                 </span>
-                <span className="text-[9px] text-aether-gold font-mono truncate">
-                  Cloud Active
+                <span className="text-[9px] text-aether-gold font-mono truncate flex items-center gap-1">
+                  <span>Security & Key</span> &rarr;
                 </span>
               </div>
-            </div>
+            </button>
             <button
               onClick={signOut}
               className="p-1.5 text-aether-muted hover:text-rose-400 rounded-lg hover:bg-aether-elevated transition"

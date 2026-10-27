@@ -8,9 +8,12 @@ interface AuthState {
   isLoading: boolean;
   isAuthModalOpen: boolean;
   isPasswordRecovery: boolean;
+  isSecurityModalOpen: boolean;
 
   openAuthModal: () => void;
   closeAuthModal: () => void;
+  openSecurityModal: () => void;
+  closeSecurityModal: () => void;
   setIsPasswordRecovery: (isRecovery: boolean) => void;
   setUser: (user: User | null) => void;
   setSession: (session: Session | null) => void;
@@ -46,9 +49,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   isAuthModalOpen: false,
   isPasswordRecovery: false,
+  isSecurityModalOpen: false,
 
   openAuthModal: () => set({ isAuthModalOpen: true }),
   closeAuthModal: () => set({ isAuthModalOpen: false }),
+  openSecurityModal: () => set({ isSecurityModalOpen: true }),
+  closeSecurityModal: () => set({ isSecurityModalOpen: false }),
   setIsPasswordRecovery: (isRecovery) => set({ isPasswordRecovery: isRecovery }),
   setUser: (user) => set({ user }),
   setSession: (session) => set({ session }),
